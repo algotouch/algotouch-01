@@ -24,6 +24,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   } = useAuth();
   
   const location = useLocation();
+  const [allowSubscriptionAccess, setAllowSubscriptionAccess] = useState(false);
   
   console.log('ProtectedRoute: Current state', {
     path: location.pathname,
@@ -31,8 +32,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     hasRegistrationData: !!registrationData,
     pendingSubscription,
     loading,
-    initialized
+    initialized,
+    allowSubscriptionAccess
   });
+  
+  // Check for subscription access on registration data changes
+  useEffect(() => {
+    if (registrationData && pendingSubscription) {
+      console.log('ProtectedRoute: Granting subscription access due to registration data');
+      setAllowSubscriptionAccess(true);
+    } else if (!registrationData && !isAuthenticated) {
+      setAllowSubscriptionAccess(false);
+    }
+  }, [registrationData, pendingSubscription, isAuthenticated]);
   
   // Show loading while auth is initializing
   if (!initialized || loading) {
@@ -61,11 +73,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     console.log('ProtectedRoute: Subscription page access check', {
       isAuthenticated,
       hasRegistrationData: !!registrationData,
-      pendingSubscription
+      pendingSubscription,
+      allowSubscriptionAccess
     });
     
-    // Allow access if user is authenticated OR has valid registration data
-    if (isAuthenticated || (registrationData && pendingSubscription)) {
+    // Allow access if user is authenticated OR has valid registration data OR explicit access granted
+    if (isAuthenticated || allowSubscriptionAccess || (registrationData && pendingSubscription)) {
       console.log('ProtectedRoute: Allowing access to subscription page');
       return <>{children}</>;
     }

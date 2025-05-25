@@ -38,6 +38,46 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
     });
   };
 
+  const navigateToSubscription = async () => {
+    console.log('SignupForm: Starting navigation process');
+    
+    // Wait a bit for context to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Try navigation with retry mechanism
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`SignupForm: Navigation attempt ${attempt}/${maxRetries}`);
+      
+      try {
+        navigate('/subscription', { replace: true });
+        console.log('SignupForm: Navigation completed');
+        
+        // Wait to see if navigation succeeded
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Check if we're on the subscription page
+        if (window.location.pathname === '/subscription') {
+          console.log('SignupForm: Successfully navigated to subscription page');
+          return true;
+        } else {
+          console.log('SignupForm: Navigation failed, current path:', window.location.pathname);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      } catch (error) {
+        console.error(`SignupForm: Navigation attempt ${attempt} failed:`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+    
+    console.error('SignupForm: All navigation attempts failed');
+    return false;
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowExistingUserError(false);
@@ -68,13 +108,14 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
       );
       
       if (result.success) {
-        console.log('SignupForm: Registration successful');
+        console.log('SignupForm: Registration successful, starting navigation');
         
-        // Force navigation to subscription page
-        console.log('SignupForm: Navigating to subscription page');
-        navigate('/subscription', { replace: true });
+        // Ensure context is updated before navigation
+        await new Promise(resolve => setTimeout(resolve, 200));
         
-        if (onSignupSuccess) {
+        const navigationSuccess = await navigateToSubscription();
+        
+        if (navigationSuccess && onSignupSuccess) {
           onSignupSuccess();
         }
       } else if (result.userExists) {

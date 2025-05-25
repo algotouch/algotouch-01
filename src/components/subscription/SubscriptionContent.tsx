@@ -15,6 +15,7 @@ const SubscriptionContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [hasShownError, setHasShownError] = useState(false);
+  const [isValidAccess, setIsValidAccess] = useState(false);
   
   const {
     currentStep,
@@ -29,6 +30,23 @@ const SubscriptionContent = () => {
   } = useSubscriptionFlow();
 
   const isLoading = flowLoading || isCheckingSubscription;
+
+  // Check access validity
+  useEffect(() => {
+    console.log('SubscriptionContent: Checking access validity', {
+      isAuthenticated,
+      hasRegistrationData: !!registrationData,
+      path: location.pathname
+    });
+    
+    if (isAuthenticated || registrationData) {
+      console.log('SubscriptionContent: Valid access detected');
+      setIsValidAccess(true);
+    } else {
+      console.log('SubscriptionContent: Invalid access - no auth or registration data');
+      setIsValidAccess(false);
+    }
+  }, [isAuthenticated, registrationData, location.pathname]);
 
   // Handle back to auth functionality
   const handleBackToAuth = () => {
@@ -60,9 +78,9 @@ const SubscriptionContent = () => {
     );
   }
 
-  // Show error state only if we really don't have any valid data
-  if (!isAuthenticated && !registrationData && !hasShownError) {
-    console.log('SubscriptionContent: No valid auth state, showing error');
+  // Show error state only if we really don't have any valid data and haven't shown error yet
+  if (!isValidAccess && !hasShownError) {
+    console.log('SubscriptionContent: No valid access state, showing error');
     setHasShownError(true);
     toast.error('נתוני הרשמה חסרים. אנא התחל תהליך הרשמה מחדש.');
     
@@ -82,6 +100,18 @@ const SubscriptionContent = () => {
           >
             חזור להרשמה עכשיו
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content if access is not valid
+  if (!isValidAccess) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">בודק הרשאות גישה...</p>
         </div>
       </div>
     );
