@@ -19,12 +19,15 @@ export async function processSignedContract(
     
     // Improved validation of inputs
     if (!userId || !planId || !email || !contractData) {
-      console.error('Missing required parameters for processSignedContract:', { 
+      const missingData = { 
         hasUserId: Boolean(userId), 
         hasPlanId: Boolean(planId), 
         hasEmail: Boolean(email),
-        hasContractData: Boolean(contractData)
-      });
+        hasContractData: Boolean(contractData),
+        hasSignature: Boolean(contractData?.signature),
+        hasContractHtml: Boolean(contractData?.contractHtml)
+      };
+      console.error('Missing required parameters for processSignedContract:', missingData);
       toast.error('חסרים פרטים הכרחיים לעיבוד החוזה');
       return false;
     }
@@ -69,7 +72,7 @@ export async function processSignedContract(
     
     if (!saveResult.success) {
       console.error('Error saving contract:', saveResult.error);
-      toast.error('שגיאה בשמירת החתימה');
+      toast.error(`שגיאה בשמירת החתימה: ${saveResult.error}`);
       return false;
     }
     
@@ -95,7 +98,8 @@ export async function processSignedContract(
     return contractId || true;
   } catch (error) {
     console.error('Exception processing contract signature:', error);
-    toast.error('שגיאה בעיבוד החתימה');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    toast.error(`שגיאה בעיבוד החתימה: ${errorMessage}`);
     return false;
   }
 }

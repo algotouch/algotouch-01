@@ -102,6 +102,16 @@ const ContractView: React.FC<ContractViewProps> = ({
       const userId = user?.id || crypto.randomUUID();
       console.log('Processing contract with userId:', userId);
       
+      // Validate required contract data before processing
+      if (!enhancedContractData.signature || !enhancedContractData.contractHtml) {
+        console.error('Missing required contract data:', {
+          hasSignature: !!enhancedContractData.signature,
+          hasContractHtml: !!enhancedContractData.contractHtml
+        });
+        toast.error('חסרים נתונים נדרשים לחתימה. אנא נסה שוב.');
+        return;
+      }
+      
       const result = await processSignedContract(
         userId,
         selectedPlan,
@@ -124,7 +134,8 @@ const ContractView: React.FC<ContractViewProps> = ({
       }
     } catch (error) {
       console.error('Exception processing contract:', error);
-      toast.error('שגיאה בעיבוד החוזה. אנא נסה שוב.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`שגיאה בעיבוד החוזה: ${errorMessage}`);
     }
   };
 
