@@ -1,9 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth';
 import { Spinner } from '@/components/ui/spinner';
-import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -19,19 +18,39 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { 
     isAuthenticated, 
     loading, 
-    initialized
+    initialized,
+    registrationData,
+    pendingSubscription
   } = useAuth();
   
-  const {
-    pendingSubscription,
-    isRegistering,
-    isLoading: regDataLoading
-  } = useUnifiedRegistrationData();
-  
   const location = useLocation();
+  const [redirectCount, setRedirectCount] = useState(0);
   
-  // Show consistent loader while auth is initializing or data is loading
-  if (!initialized || loading || regDataLoading) {
+  // Circuit breaker to prevent infinite redirects
+  useEffect(() => {
+    const currentPath = location.pathname;
+    const redirectKey = `redirect_count_${currentPath}`;
+    const count = parseInt(sessionStorage.getItem(redirectKey) || '0');
+    
+    if (count > 3) {
+      console.error('Too many redirects detected, clearing session data');
+      sessionStorage.clear();
+      localStorage.clear();
+      window.location.href = '/auth?tab=signup&reset=true';
+      return;
+    }
+    
+    setRedirectCount(count);
+    sessionStorage.setItem(redirectKey, (count + 1).toString());
+    
+    // Clear redirect count after 30 seconds
+    setTimeout(() => {
+      sessionStorage.removeItem(redirectKey);
+    }, 30000);
+  }, [location.pathname]);
+  
+  // Show loading while auth is initializing
+  if (!initialized || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-background/90">
         <div className="text-center space-y-4">
@@ -42,50 +61,53 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Allow access to public paths regardless of auth status
-  if (isPublicPath(location.pathname, publicPaths)) {
+  // Check if current path is public
+  const isPublicPath = publicPaths.some(publicPath => 
+    location.pathname === publicPath || location.pathname.startsWith(`${publicPath}/`)
+  );
+
+  // Allow access to public paths
+  if (isPublicPath) {
     return <>{children}</>;
   }
 
-  // Special case for subscription page - allow access if:
-  // 1. User is authenticated OR
-  // 2. User is in registration process (pendingSubscription flag is true)
-  if (isSubscriptionPath(location.pathname)) {
-    if (isAuthenticated || pendingSubscription || isRegistering) {
-      console.log("ProtectedRoute: Allowing access to subscription path", {
-        isAuthenticated,
-        pendingSubscription,
-        isRegistering
-      });
+  // Special handling for subscription page
+  if (location.pathname === '/subscription' || location.pathname.startsWith('/subscription/')) {
+    console.log('ProtectedRoute: Subscription page access check', {
+      isAuthenticated,
+      hasRegistrationData: !!registrationData,
+      pendingSubscription,
+      redirectCount
+    });
+    
+    // Prevent redirect loops - if we've been here too many times, force to auth
+    if (redirectCount > 2) {
+      console.log('ProtectedRoute: Too many subscription redirects, forcing to auth');
+      return <Navigate to="/auth?tab=signup&forced=true" replace />;
+    }
+    
+    // Allow access if user is authenticated OR has valid registration data
+    if (isAuthenticated || (registrationData && pendingSubscription)) {
       return <>{children}</>;
     }
-    console.log("ProtectedRoute: User is not authenticated for subscription, redirecting to auth");
-    return <Navigate to="/auth?tab=signup" state={{ from: location, redirectToSubscription: true }} replace />;
+    
+    // Only redirect to auth if we don't have any valid state
+    console.log('ProtectedRoute: No valid auth state for subscription, redirecting to auth');
+    return <Navigate to="/auth?tab=signup&reason=subscription" replace />;
   }
 
-  // Standard auth checks
+  // Standard protected route logic
   if (requireAuth && !isAuthenticated) {
-    console.log("ProtectedRoute: User is not authenticated, redirecting to auth");
+    console.log('ProtectedRoute: User not authenticated, redirecting to auth');
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
   if (!requireAuth && isAuthenticated) {
-    console.log("ProtectedRoute: User is already authenticated, redirecting to dashboard");
+    console.log('ProtectedRoute: User already authenticated, redirecting to dashboard');
     return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 };
-
-// Helper functions to improve readability
-function isPublicPath(path: string, publicPaths: string[]): boolean {
-  return publicPaths.some(publicPath => 
-    path === publicPath || path.startsWith(`${publicPath}/`)
-  );
-}
-
-function isSubscriptionPath(path: string): boolean {
-  return path === '/subscription' || path.startsWith('/subscription/');
-}
 
 export default ProtectedRoute;

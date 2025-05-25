@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
+import { useSimpleRegistrationData } from '@/hooks/useSimpleRegistrationData';
 import { validateSignupInputs } from './signup/validationUtils';
 import { handleSignupProcess } from './signup/signupService';
 import SignupFormFields from './signup/SignupFormFields';
@@ -16,7 +16,7 @@ interface SignupFormProps {
 
 const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogin }) => {
   const navigate = useNavigate();
-  const { updateRegistrationData, startRegistering, clearRegistrationData } = useUnifiedRegistrationData();
+  const { updateRegistrationData, clearRegistrationData } = useSimpleRegistrationData();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,6 +27,15 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
   const [signingUp, setSigningUp] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [showExistingUserError, setShowExistingUserError] = useState(false);
+
+  const startRegistering = () => {
+    // Simple function to start registration process
+    updateRegistrationData({
+      email,
+      userData: { firstName, lastName, phone },
+      registrationTime: new Date().toISOString()
+    });
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +65,14 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
       
       if (result.success) {
         console.log('SignupForm: Registration successful, navigating to subscription page');
+        
+        // Clear redirect counters before navigation
+        Object.keys(sessionStorage).forEach(key => {
+          if (key.startsWith('redirect_count_')) {
+            sessionStorage.removeItem(key);
+          }
+        });
+        
         navigate('/subscription', { replace: true });
         
         if (onSignupSuccess) {
@@ -73,7 +90,6 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
     if (onSwitchToLogin) {
       onSwitchToLogin();
     } else {
-      // Fallback to URL navigation if callback not provided
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('tab', 'login');
       navigate(currentUrl.pathname + currentUrl.search, { replace: true });

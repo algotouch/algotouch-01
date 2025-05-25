@@ -9,7 +9,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
 
 const Auth = () => {
   const { 
@@ -17,13 +16,9 @@ const Auth = () => {
     loading, 
     initialized, 
     error,
-  } = useAuth();
-  
-  const {
-    pendingSubscription,
     registrationData,
     clearRegistrationData
-  } = useUnifiedRegistrationData();
+  } = useAuth();
   
   const [activeTab, setActiveTab] = React.useState<'login' | 'signup'>('login');
   const location = useLocation();
@@ -35,6 +30,25 @@ const Auth = () => {
     try {
       const params = new URLSearchParams(location.search);
       const tab = params.get('tab');
+      const reset = params.get('reset');
+      const forced = params.get('forced');
+      
+      // Handle forced reset
+      if (reset === 'true' || forced === 'true') {
+        console.log('Auth: Forced reset detected, clearing all data');
+        clearRegistrationData();
+        sessionStorage.clear();
+        
+        // Clear the URL parameters
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('reset');
+        newUrl.searchParams.delete('forced');
+        newUrl.searchParams.delete('reason');
+        window.history.replaceState({}, '', newUrl.toString());
+        
+        toast.info('המערכת אופסה. אנא התחל מחדש.');
+      }
+      
       if (tab === 'signup') {
         setActiveTab('signup');
       } else if (tab === 'login') {
@@ -43,7 +57,7 @@ const Auth = () => {
     } catch (error) {
       console.error("Error parsing URL params:", error);
     }
-  }, [location]);
+  }, [location, clearRegistrationData]);
 
   // Check if the state specifies to show the signup tab
   useEffect(() => {
@@ -64,28 +78,26 @@ const Auth = () => {
     }
   }, [error, navigate]);
   
-  // Detect and clear stale registration data
+  // Handle stale registration data - but don't clear immediately to prevent loops
   useEffect(() => {
-    if (registrationData) {
-      // Check if the registration data is old (> 1 hour)
+    if (registrationData && !isAuthenticated) {
       const registrationTime = registrationData.registrationTime ? 
         new Date(registrationData.registrationTime).getTime() : 0;
       const now = new Date().getTime();
-      const oneHourMs = 60 * 60 * 1000;
+      const twoHoursMs = 2 * 60 * 60 * 1000; // Extended to 2 hours
       
-      if (now - registrationTime > oneHourMs) {
-        console.log('Auth: Registration data is stale (>1 hour), clearing');
+      if (now - registrationTime > twoHoursMs) {
+        console.log('Auth: Registration data is very stale (>2 hours), clearing');
         clearRegistrationData();
         toast.info('מידע ההרשמה הישן נמחק. אנא התחל מחדש');
       }
     }
-  }, [registrationData, clearRegistrationData]);
+  }, [registrationData, isAuthenticated, clearRegistrationData]);
 
   // Function to switch tabs
   const handleSwitchToLogin = () => {
     console.log('Auth: Switching to login tab');
     setActiveTab('login');
-    // Update URL as well
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('tab', 'login');
     navigate(currentUrl.pathname + currentUrl.search, { replace: true });
@@ -94,7 +106,6 @@ const Auth = () => {
   const handleSwitchToSignup = () => {
     console.log('Auth: Switching to signup tab');
     setActiveTab('signup');
-    // Update URL as well
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('tab', 'signup');
     navigate(currentUrl.pathname + currentUrl.search, { replace: true });
@@ -109,25 +120,17 @@ const Auth = () => {
     );
   }
 
-  // If user is already authenticated, handle different redirect scenarios
+  // If user is already authenticated, redirect to dashboard
   if (isAuthenticated) {
-    console.log("Auth page: User is authenticated");
+    console.log("Auth page: User is authenticated, redirecting to dashboard");
     
-    // If we have stale registration data, clear it first
+    // Clear any stale registration data for authenticated users
     if (registrationData) {
-      console.log("Auth: Clearing stale registration data for authenticated user");
+      console.log("Auth: Clearing registration data for authenticated user");
       clearRegistrationData();
-      sessionStorage.removeItem('registration_data');
     }
     
-    // Always redirect authenticated users to dashboard
-    // Don't redirect to subscription page from here to prevent loops
     return <Navigate to="/dashboard" replace />;
-  }
-
-  // If pending subscription without authentication, redirect to subscription
-  if (pendingSubscription && !isAuthenticated) {
-    return <Navigate to="/subscription" replace />;
   }
 
   return (
