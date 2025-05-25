@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 
 type Direction = 'ltr' | 'rtl';
 
@@ -24,30 +24,7 @@ export function DirectionProvider({
   dir = 'rtl', // Default to RTL based on your app's Hebrew language
   children,
 }: DirectionProviderProps) {
-  const [mounted, setMounted] = useState(false);
-  
-  // Ensure component is mounted before using React hooks
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // Use a simple value until mounted - no useMemo here
-  if (!mounted) {
-    return (
-      <DirectionContext.Provider value={{ dir }}>
-        {children}
-      </DirectionContext.Provider>
-    );
-  }
-  
-  return <DirectionProviderMounted dir={dir}>{children}</DirectionProviderMounted>;
-}
-
-const DirectionProviderMounted: React.FC<{ dir: Direction; children: React.ReactNode }> = ({
-  dir,
-  children,
-}) => {
-  // Now we can safely use useMemo since the component is mounted
+  // Safe to use useMemo since ReactReadyProvider ensures React is ready
   const value = useMemo(() => ({ dir }), [dir]);
   
   return (
@@ -55,4 +32,4 @@ const DirectionProviderMounted: React.FC<{ dir: Direction; children: React.React
       {children}
     </DirectionContext.Provider>
   );
-};
+}

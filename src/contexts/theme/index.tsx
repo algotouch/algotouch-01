@@ -2,20 +2,8 @@
 import React from 'react';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-// Create a wrapper component to ensure proper initialization
+// Simplified theme provider - no mounting check needed
 const ThemeProviderWrapper = ({ children }: { children: React.ReactNode }) => {
-  // Use a simple state to ensure component is mounted before initializing themes
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Don't render the theme provider until component is mounted
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
   return (
     <NextThemesProvider 
       attribute="class" 

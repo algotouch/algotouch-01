@@ -2,7 +2,7 @@
 import { useTheme as useNextThemes } from 'next-themes';
 import { useEffect, useState } from 'react';
 
-// Export the hook with proper error handling and mounting check
+// Simplified theme hook - ReactReadyProvider ensures safe usage
 export const useTheme = () => {
   const [mounted, setMounted] = useState(false);
 

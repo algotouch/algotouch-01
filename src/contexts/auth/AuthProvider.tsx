@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './AuthContext';
@@ -6,45 +7,6 @@ import { RegistrationData as AuthRegistrationData } from './types';
 import { supabase } from '@/lib/supabase-client';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [mounted, setMounted] = useState(false);
-  
-  // Ensure component is mounted before using React hooks
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // Don't initialize auth hooks until component is mounted
-  if (!mounted) {
-    return (
-      <AuthContext.Provider value={{
-        user: null,
-        session: null,
-        loading: true,
-        isAuthenticated: false,
-        initialized: false,
-        error: null,
-        registrationData: null,
-        isRegistering: false,
-        pendingSubscription: false,
-        signIn: async () => { throw new Error('AuthContext not initialized') },
-        signUp: async () => { throw new Error('AuthContext not initialized') },
-        signOut: async () => { throw new Error('AuthContext not initialized') },
-        updateProfile: async () => { throw new Error('AuthContext not initialized') },
-        resetPassword: async () => { throw new Error('AuthContext not initialized') },
-        setRegistrationData: () => { throw new Error('AuthContext not initialized') },
-        clearRegistrationData: () => { throw new Error('AuthContext not initialized') },
-        setPendingSubscription: () => { throw new Error('AuthContext not initialized') },
-        validateSession: async () => { throw new Error('AuthContext not initialized') }
-      }}>
-        {children}
-      </AuthContext.Provider>
-    );
-  }
-
-  return <AuthProviderMounted>{children}</AuthProviderMounted>;
-};
-
-const AuthProviderMounted: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useSecureAuth();
   const navigate = useNavigate();
   const [hasError, setHasError] = useState(false);
