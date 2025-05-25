@@ -75,13 +75,14 @@ export const registerUser = async ({ registrationData, tokenData, contractDetail
       throw subscriptionError;
     }
     
-    // Create payment history record
-    await supabase.from('payment_history').insert({
+    // Create payment history record using user_payment_logs table
+    await supabase.from('user_payment_logs').insert({
       user_id: userData.user.id,
       subscription_id: userData.user.id,
       amount: 0,
       status: 'trial_started',
-      payment_method: paymentMethodJson
+      payment_method: paymentMethodJson,
+      token: `trial_${userData.user.id}`
     });
     
     // Update profile information

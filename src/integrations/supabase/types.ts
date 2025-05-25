@@ -324,6 +324,45 @@ export type Database = {
         }
         Relationships: []
       }
+      documents: {
+        Row: {
+          created_at: string
+          document_date: string | null
+          document_number: string
+          document_type: string
+          document_url: string
+          id: string
+          metadata: Json | null
+          payment_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_date?: string | null
+          document_number: string
+          document_type: string
+          document_url: string
+          id?: string
+          metadata?: Json | null
+          payment_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_date?: string | null
+          document_number?: string
+          document_type?: string
+          document_url?: string
+          id?: string
+          metadata?: Json | null
+          payment_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payment_errors: {
         Row: {
           created_at: string
@@ -350,6 +389,45 @@ export type Database = {
           id?: string
           request_data?: Json | null
           response_data?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payment_history: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          payment_date: string | null
+          payment_method: Json | null
+          status: string
+          subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_date?: string | null
+          payment_method?: Json | null
+          status: string
+          subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          payment_date?: string | null
+          payment_method?: Json | null
+          status?: string
+          subscription_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -444,6 +522,42 @@ export type Database = {
           transaction_id?: string | null
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      payment_tokens: {
+        Row: {
+          card_brand: string | null
+          card_last_four: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          token: string
+          token_expiry: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_brand?: string | null
+          card_last_four?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          token: string
+          token_expiry: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_brand?: string | null
+          card_last_four?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          token?: string
+          token_expiry?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

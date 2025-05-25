@@ -50,7 +50,7 @@ export const handleExistingUserPayment = async (
     
     if (planId !== 'monthly' || operationType !== 3) {
       const { data: paymentData, error: paymentError } = await supabase
-        .from('payment_history')
+        .from('user_payment_logs')
         .insert({
           user_id: userId,
           subscription_id: userId,
@@ -60,7 +60,8 @@ export const handleExistingUserPayment = async (
           payment_method: {
             ...tokenData,
             simulated: false 
-          }
+          },
+          token: tokenData.token?.toString() || `payment_${Date.now()}`
         })
         .select()
         .single();
@@ -117,14 +118,15 @@ export const handleExistingUserPayment = async (
       }
     } else {
       await supabase
-        .from('payment_history')
+        .from('user_payment_logs')
         .insert({
           user_id: userId,
           subscription_id: userId,
           amount: 0,
           currency: 'USD',
           status: 'trial_started',
-          payment_method: tokenData
+          payment_method: tokenData,
+          token: `trial_${userId}`
         });
     }
   } catch (error) {
@@ -293,7 +295,7 @@ export const generateDocument = async (
     }
     
     const { data: paymentData, error: paymentError } = await supabase
-      .from('payment_history')
+      .from('user_payment_logs')
       .select('amount, subscription_id')
       .eq('id', paymentId)
       .single();
@@ -306,7 +308,7 @@ export const generateDocument = async (
     const { data: subscriptionData, error: subError } = await supabase
       .from('subscriptions')
       .select('plan_type')
-      .eq('id', paymentData.subscription_id)
+      .eq('user_id', paymentData.subscription_id)
       .single();
       
     if (subError) {

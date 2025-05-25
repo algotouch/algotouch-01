@@ -1,13 +1,13 @@
 
 import { createClient } from '@supabase/supabase-js';
-import type { ExtendedDatabase } from '@/types/supabase';
+import type { Database } from '@/integrations/supabase/types';
 
 // The Supabase URL and key are injected at build time
 const SUPABASE_URL = "https://ndhakvhrrkczgylcmyoc.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kaGFrdmhycmtjemd5bGNteW9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI4NTUxNzIsImV4cCI6MjA1ODQzMTE3Mn0.dJg3Pe8DNXuvy4PvcBwBo64K2Le-zptEuYZtr_49xIk";
 
 // Create a singleton instance of the Supabase client with proper configuration
-export const supabase = createClient<ExtendedDatabase>(
+export const supabase = createClient<Database>(
   SUPABASE_URL, 
   SUPABASE_PUBLISHABLE_KEY,
   {
