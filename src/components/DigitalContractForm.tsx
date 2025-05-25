@@ -1,9 +1,15 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import SignaturePad from '@/components/signature/SignaturePad';
-import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Check, FileText, Download, ArrowDown } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import SignaturePad from './signature/SignaturePad';
+import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/auth';
 
 interface DigitalContractFormProps {
   onSign: (contractData: any) => void;
@@ -14,405 +20,466 @@ interface DigitalContractFormProps {
 const DigitalContractForm: React.FC<DigitalContractFormProps> = ({
   onSign,
   planId,
-  fullName
+  fullName,
 }) => {
-  const [signature, setSignature] = useState<string>('');
-  const [agreedToTerms, setAgreedToTerms] = useState<boolean>(false);
-  const [agreedToPrivacy, setAgreedToPrivacy] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [userIP, setUserIP] = useState<string>('');
+  // Form state
+  const [userDetails, setUserDetails] = useState({
+    fullName: fullName || '',
+    address: '',
+    idNumber: '',
+    phone: '',
+    email: '',
+  });
+  const [signature, setSignature] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [isSigningInProgress, setIsSigningInProgress] = useState(false);
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const [registrationData, setRegistrationData] = useState<any>(null);
+  const [contractVersion] = useState('1.0');
+  const contractRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
-  // Get user's IP address
+  // Get registration data from session storage
   useEffect(() => {
-    const fetchUserIP = async () => {
-      try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        setUserIP(data.ip);
-      } catch (error) {
-        console.warn('Could not fetch user IP:', error);
-        setUserIP('Unknown');
+    const storedData = sessionStorage.getItem('registration_data');
+    if (storedData) {
+      const data = JSON.parse(storedData);
+      setRegistrationData(data);
+      
+      // If user data is available, populate form fields
+      if (data.userData) {
+        setUserDetails(prev => ({
+          ...prev,
+          fullName: data.userData.firstName && data.userData.lastName 
+            ? `${data.userData.firstName} ${data.userData.lastName}` 
+            : prev.fullName,
+          email: data.email || prev.email
+        }));
       }
-    };
-    
-    fetchUserIP();
+    }
   }, []);
 
-  const handleSubmit = async () => {
-    if (!signature) {
-      toast.error('נדרשת חתימה דיגיטלית');
-      return;
-    }
-
-    if (!agreedToTerms || !agreedToPrivacy) {
-      toast.error('נדרש לאשר את התנאים ומדיניות הפרטיות');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Generate contract HTML with full content
-      const contractHtml = generateContractHTML();
-      
-      const contractData = {
-        signature,
-        contractHtml,
-        agreedToTerms,
-        agreedToPrivacy,
-        contractVersion: "1.0",
-        browserInfo: {
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          platform: navigator.platform,
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          ipAddress: userIP
-        }
-      };
-
-      console.log('DigitalContractForm: Submitting contract with data:', {
-        hasSignature: !!signature,
-        hasContractHtml: !!contractHtml,
-        agreedToTerms,
-        agreedToPrivacy,
-        ipAddress: userIP
-      });
-
-      onSign(contractData);
-    } catch (error) {
-      console.error('Error submitting contract:', error);
-      toast.error('שגיאה בשליחת החוזה');
-    } finally {
-      setIsSubmitting(false);
+  // Handle contract scroll to detect when user has read the entire document
+  const handleContractScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    // Check if scrolled to bottom (with a small margin)
+    if (scrollHeight - scrollTop - clientHeight < 30) {
+      setScrolledToBottom(true);
     }
   };
 
-  const generateContractHTML = () => {
-    const now = new Date();
-    const hebrewDate = now.toLocaleDateString('he-IL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  // Get browser information for audit purposes
+  const getBrowserInfo = () => {
+    return {
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      platform: navigator.platform,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    };
+  };
 
-    return `
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>חוזה מנוי - TraderVue</title>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background-color: #f9f9f9;
-            direction: rtl;
-        }
-        .contract-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            border-bottom: 3px solid #2563eb;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
-        }
-        .logo {
-            font-size: 28px;
-            font-weight: bold;
-            color: #2563eb;
-            margin-bottom: 10px;
-        }
-        .contract-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1f2937;
-            margin: 20px 0;
-        }
-        .section {
-            margin-bottom: 25px;
-        }
-        .section-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #374151;
-            margin-bottom: 10px;
-            border-right: 4px solid #2563eb;
-            padding-right: 10px;
-        }
-        .terms-list {
-            list-style-type: decimal;
-            padding-right: 20px;
-        }
-        .terms-list li {
-            margin-bottom: 10px;
-            line-height: 1.8;
-        }
-        .highlight {
-            background-color: #fef3c7;
-            padding: 2px 4px;
-            border-radius: 3px;
-        }
-        .signature-section {
-            margin-top: 40px;
-            padding: 20px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            background-color: #f8fafc;
-        }
-        .signature-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        .info-item {
-            display: flex;
-            flex-direction: column;
-        }
-        .info-label {
-            font-weight: bold;
-            color: #374151;
-            margin-bottom: 5px;
-        }
-        .info-value {
-            color: #6b7280;
-            border-bottom: 1px solid #d1d5db;
-            padding-bottom: 5px;
-        }
-        .signature-box {
-            border: 2px dashed #9ca3af;
-            min-height: 150px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: white;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        .signature-image {
-            max-width: 300px;
-            max-height: 120px;
-        }
-        .footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid #e5e7eb;
-            font-size: 12px;
-            color: #6b7280;
-            text-align: center;
-        }
-        .technical-info {
-            margin-top: 30px;
-            padding: 15px;
-            background-color: #f3f4f6;
-            border-radius: 6px;
-            font-size: 11px;
-            color: #4b5563;
-        }
-        .technical-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-        }
-        .tech-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 5px 0;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        @media print {
-            body { background: white; }
-            .contract-container { box-shadow: none; }
-        }
-    </style>
-</head>
-<body>
-    <div class="contract-container">
-        <div class="header">
-            <div class="logo">TraderVue</div>
-            <h1 class="contract-title">חוזה מנוי לשירותי מסחר</h1>
-            <p>תאריך: ${hebrewDate}</p>
-        </div>
+  // Generate HTML content of the contract
+  const getContractHtml = () => {
+    return contractRef.current?.innerHTML || '';
+  };
 
-        <div class="section">
-            <h2 class="section-title">פרטי המנוי</h2>
-            <div class="signature-info">
-                <div class="info-item">
-                    <span class="info-label">שם מלא:</span>
-                    <span class="info-value">${fullName}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">חבילת מנוי:</span>
-                    <span class="info-value">${planId === 'monthly' ? 'חבילה חודשית' : planId === 'annual' ? 'חבילה שנתית' : planId}</span>
-                </div>
-            </div>
-        </div>
+  // Handle form submission and signing process
+  const handleSign = async () => {
+    if (!userDetails.fullName || !signature || !agreedToTerms || !agreedToPrivacy || !scrolledToBottom) {
+      toast({
+        title: "לא ניתן להשלים את החתימה",
+        description: !scrolledToBottom 
+          ? "יש לקרוא את ההסכם במלואו ולגלול עד לסופו" 
+          : "יש למלא את כל השדות הנדרשים ולהסכים לתנאים",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      setIsSigningInProgress(true);
+      console.log("Preparing contract data for signing...");
+      
+      // Store signing information in session storage for continued registration flow
+      if (registrationData) {
+        const updatedData = {
+          ...registrationData,
+          contractSigned: true,
+          contractSignedAt: new Date().toISOString(),
+          signature,
+          planId,
+          userData: {
+            ...registrationData.userData,
+            fullName: userDetails.fullName,
+            address: userDetails.address,
+            idNumber: userDetails.idNumber,
+            phone: userDetails.phone,
+            email: userDetails.email || registrationData.email
+          }
+        };
+        sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
+      }
 
-        <div class="section">
-            <h2 class="section-title">תנאי השירות</h2>
-            <ol class="terms-list">
-                <li>השירות מיועד למטרות מסחר ואינו מהווה יעוץ השקעות</li>
-                <li>המשתמש אחראי לכל ההחלטות הכספיות שיקבל</li>
-                <li>החברה אינה אחראית להפסדים או נזקים הנובעים משימוש בשירות</li>
-                <li>המנוי מתחדש אוטומטית אלא אם בוטל 24 שעות לפני תום התקופה</li>
-                <li>ביטול המנוי יכול להתבצע בכל עת דרך האזור האישי</li>
-                <li>החברה שומרת על הזכות לשנות את התנאים עם הודעה מוקדמת</li>
-                <li>כל מחלוקת תיפתר בבית משפט מוסמך בישראל</li>
-            </ol>
-        </div>
+      // Prepare contract data for passing to parent component
+      const contractData = {
+        userId: user?.id,
+        fullName: userDetails.fullName,
+        address: userDetails.address,
+        idNumber: userDetails.idNumber,
+        phone: userDetails.phone,
+        email: userDetails.email || user?.email,
+        signature,
+        contractVersion,
+        contractHtml: getContractHtml(),
+        agreedToTerms,
+        agreedToPrivacy,
+        browserInfo: getBrowserInfo()
+      };
+      
+      console.log("Calling onSign with contract data", {
+        fullName: contractData.fullName,
+        hasSignature: Boolean(contractData.signature),
+        hasContractHtml: Boolean(contractData.contractHtml),
+        contractVersion: contractData.contractVersion,
+      });
+      
+      // Call the onSign callback with the contract data
+      if (typeof onSign === 'function') {
+        onSign(contractData);
+      } else {
+        console.error("onSign is not a function", onSign);
+        toast({
+          title: "שגיאה בתהליך החתימה",
+          description: "אירעה שגיאה בעת ביצוע החתימה. אנא נסה שנית",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error signing contract:', error);
+      toast({
+        title: "שגיאה בתהליך החתימה",
+        description: "אירעה שגיאה בעת ביצוע החתימה. אנא נסה שנית",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSigningInProgress(false);
+    }
+  };
 
-        <div class="section">
-            <h2 class="section-title">הצהרות המנוי</h2>
-            <p>אני החתום מטה מצהיר ומתחייב:</p>
-            <ul style="padding-right: 20px;">
-                <li>קראתי והבנתי את כל תנאי החוזה</li>
-                <li>אני מסכים לתנאי השירות ומדיניות הפרטיות</li>
-                <li>הפרטים שמסרתי נכונים ומעודכנים</li>
-                <li>אני בגיר ובעל כשירות משפטית לחתימה על חוזה זה</li>
-            </ul>
-        </div>
+  // Allow user to download the contract - making this a separate function
+  // that will be called explicitly rather than automatically
+  const downloadContract = () => {
+    const contractContent = contractRef.current?.innerHTML;
+    if (!contractContent) return;
+    
+    // Get browser info for the footer
+    const browserInfo = getBrowserInfo();
+    const ipAddress = registrationData?.ipAddress || "לא זוהה";
+    const currentDate = new Date().toLocaleString('he-IL');
+    
+    const blob = new Blob([`
+      <html>
+        <head>
+          <title>הסכם התקשרות - ${userDetails.fullName}</title>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; }
+            h3, h4 { margin-top: 20px; }
+            .signature { margin-top: 30px; border-top: 1px solid #ccc; padding-top: 10px; }
+            .browser-info { margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <h2>הסכם התקשרות</h2>
+          <p>נחתם ביום: ${new Date().toLocaleDateString('he-IL')}</p>
+          ${contractContent}
+          <div class="signature">
+            <p>שם מלא: ${userDetails.fullName}</p>
+            <p>כתובת: ${userDetails.address}</p>
+            <p>ת.ז./ח.פ: ${userDetails.idNumber}</p>
+            <p>טלפון: ${userDetails.phone}</p>
+            <p>דואר אלקטרוני: ${userDetails.email}</p>
+            ${signature ? `<img src="${signature}" alt="חתימה דיגיטלית" style="max-width: 300px; border: 1px solid #eee; margin-top: 10px;" />` : ''}
+            <p>מועד החתימה: ${new Date().toLocaleString('he-IL')}</p>
+          </div>
+          <div class="browser-info">
+            <h4>מידע טכני על החתימה:</h4>
+            <p>כתובת IP: ${ipAddress}</p>
+            <p>דפדפן: ${browserInfo.userAgent}</p>
+            <p>שפת דפדפן: ${browserInfo.language}</p>
+            <p>פלטפורמה: ${browserInfo.platform}</p>
+            <p>רזולוציית מסך: ${browserInfo.screenSize}</p>
+            <p>אזור זמן: ${browserInfo.timeZone}</p>
+            <p>תאריך ושעה: ${currentDate}</p>
+          </div>
+        </body>
+      </html>
+    `], { type: 'text/html' });
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `הסכם-התקשרות-${userDetails.fullName}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-        <div class="signature-section">
-            <h2 class="section-title">חתימה דיגיטלית</h2>
-            <div class="signature-box">
-                <img src="${signature}" alt="חתימה דיגיטלית" class="signature-image" />
-            </div>
-            
-            <div class="signature-info">
-                <div class="info-item">
-                    <span class="info-label">תאריך חתימה:</span>
-                    <span class="info-value">${now.toLocaleString('he-IL')}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">כתובת IP:</span>
-                    <span class="info-value">${userIP}</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="technical-info">
-            <h3 style="margin-top: 0; color: #374151;">מידע טכני לצורכי אימות</h3>
-            <div class="technical-grid">
-                <div class="tech-item">
-                    <span>דפדפן:</span>
-                    <span>${navigator.userAgent}</span>
-                </div>
-                <div class="tech-item">
-                    <span>שפה:</span>
-                    <span>${navigator.language}</span>
-                </div>
-                <div class="tech-item">
-                    <span>פלטפורמה:</span>
-                    <span>${navigator.platform}</span>
-                </div>
-                <div class="tech-item">
-                    <span>אזור זמן:</span>
-                    <span>${Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-                </div>
-                <div class="tech-item">
-                    <span>רזולוציה:</span>
-                    <span>${window.innerWidth}x${window.innerHeight}</span>
-                </div>
-                <div class="tech-item">
-                    <span>זמן חתימה UTC:</span>
-                    <span>${now.toISOString()}</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>חוזה זה נחתם באמצעות מערכת חתימה דיגיטלית מאובטחת</p>
-            <p>© ${now.getFullYear()} TraderVue - כל הזכויות שמורות</p>
-        </div>
-    </div>
-</body>
-</html>`;
+  // Handle input change for user details
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setUserDetails(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
-    <div className="space-y-6">
-      {/* Contract content display */}
-      <div className="border rounded-lg p-6 bg-white max-h-96 overflow-y-auto">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-blue-600 mb-2">TraderVue</h2>
-          <h3 className="text-xl font-semibold mb-4">חוזה מנוי לשירותי מסחר</h3>
+    <Card className="max-w-3xl mx-auto glass-card-2025" dir="rtl">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <FileText className="h-6 w-6 text-primary" />
+          <CardTitle>הסכם שימוש במערכת</CardTitle>
+        </div>
+        <CardDescription>נא לקרוא את כל תנאי ההסכם לפני החתימה</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="relative">
+          <div 
+            ref={contractRef}
+            className="border rounded-md p-4 h-80 overflow-y-auto bg-card/50 text-sm scroll-smooth"
+            onScroll={handleContractScroll}
+          >
+            <h3 className="font-bold text-lg mb-2">הסכם רישיון תוכנה</h3>
+            <p className="my-2">מסמך זה מהווה הסכם משפטי לרישיון תוכנה (להלן: "ההסכם") בין חברת אלגוטאצ' טכנולוגיות בע"מ, ח.פ. 517043808, מרחוב איילון 4ג', חדרה (להלן: "החברה"), לבין כל אדם או תאגיד הרוכש או עושה שימוש בתוכנת החברה (להלן: "המשתמש"). השימוש בתוכנה כפוף לתנאי ההסכם – התקנה או שימוש בתוכנה מהווים אישור והסכמה מצד המשתמש לכל תנאיו. אם המשתמש אינו מסכים לתנאים המפורטים להלן, עליו להימנע מהתקנת התוכנה או משימוש בה בכל דרך שהיא.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">1. הענקת רישיון</h4>
+            <p><strong>1.1 רישיון מוגבל</strong> – בכפוף לתנאי ההסכם, החברה מעניקה בזאת למשתמש רישיון מוגבל, בלתי-בלעדי, בלתי ניתן להעברה ואישי להתקין ולהשתמש בתוכנה, בהתאם לייעודה ובכפוף לכל תנאי ההסכם. רישיון זה ניתן לשימושו הפנימי של המשתמש בלבד ובהתאם לחבילת הרישוי שרכש (כהגדרתה להלן).</p>
+            <p><strong>1.2 אין בהענקת הרישיון משום מכר</strong> – התוכנה ניתנת ברישיון לשימוש מוגבל ואינה נמכרת למשתמש. כל הזכויות בתוכנה ייוותרו בבעלות החברה (או בעלי זכויות אחרים, לפי העניין), והמשתמש מקבל אך ורק את זכות השימוש המוגבלת כמפורט בהסכם זה.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">2. זכויות קניין רוחני</h4>
+            <p><strong>2.1 בעלות החברה בתוכנה</strong> – כל זכויות הקניין הרוחני בתוכנה ובכל רכיביה, לרבות קוד המקור והקוד הבינארי, קוד הקוד, עיצוב, אלגוריתמים, מסדי נתונים, ממשקי משתמש, תכנים, שיפורים, עדכונים, שדרוגים, תיעוד נלווה, סימני מסחר, לוגואים וסודות מסחריים (בין אם רשומים ובין אם לאו) – היו ועודם בכל עת בבעלות המלאה והבלעדית של החברה ו/או ספקי הרישיון שלה. שום זכות, בעלות או חלק בזכויות אלה אינו מועבר למשתמש במסגרת הסכם זה, למעט הזכות המפורשת להשתמש בתוכנה בהתאם לרישיון המוגבל המוענק בהסכם.</p>
+            <p><strong>2.2 איסור פגיעה בזכויות</strong> – המשתמש מתחייב שלא לבצע, ולא לאפשר לאחר לבצע, כל פעולה העלולה לפגוע בזכויות הקניין הרוחני של החברה בתוכנה. בכלל זה, ומבלי לגרוע מכלליות האמור, חל איסור מוחלט על המשתמש להעתיק, להפיץ, לשכפל, לשנות, לעבד, לתרגם, ליצור יצירות נגזרות, להעמיד לרשות הציבור, או להשתמש בתוכנה או בכל חלק ממנה, בכל אופן החורג מן המותר בהסכם זה.</p>
+            <p><strong>2.3 הודעות והגבלות</strong> – המשתמש לא יסיר, יטשטש או ישנה כל סימן, כיתוב או הודעת זכויות יוצרים, סימן מסחר, לוגו או הודעת קניין רוחני אחרת המופיעים בתוכנה או בחומריה הנלווים. כל התיעוד, המדריכים, הקבצים והחומרים הנלווים שהתוכנה או החברה מעמידה לרשות המשתמש ייחשבו כחלק מהתוכנה, וכפופים להגבלות ולהגנת זכויות הקניין הרוחני כאמור.</p>
+            <p><strong>2.4 משוב ושיפורים</strong> – כל משוב, רעיון, הצעה לשיפור, דיווח על באגים או מידע אחר שהמשתמש מוסר לחברה בקשר לתוכנה יהיה לקניין החברה. המשתמש מסכים ומאשר שכל זכות, לרבות זכות קניין רוחני, במשוב כאמור תועבר לחברה, והחברה רשאית להשתמש בו, לשלב אותו בתוכנה או במוצרים אחרים, או ליישמו בכל אופן שהוא – והכול ללא הגבלה, תשלום או תמורה למשתמש.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">3. הגבלות שימוש</h4>
+            <p>המשתמש מתחייב לעשות שימוש בתוכנה אך ורק בהתאם לרישיון ובהתאם לכל דין, ולמטרות חוקיות. מבלי לגרוע מכלליות האמור, ובכפוף להוראות דין שלא ניתן להתנות עליהן, המשתמש מתחייב שלא לבצע את הפעולות הבאות ללא הרשאה מפורשת מראש ובכתב מהחברה:</p>
+            <p><strong>העתקה והפצה בלתי מורשית</strong> – לא להעתיק, לשכפל, להפיץ, למכור, לשווק, להשאיל, להשכיר, להחכיר, לתת רישיון משנה (Sub-license) או למסור לצד שלישי את התוכנה או חלקים ממנה, למעט העתקה לצרכי התקנה ושימוש מורשה בתוכנה על פי הסכם זה, והפקת עותק גיבוי יחיד לצרכי התאוששות.</p>
+            <p><strong>שינוי וקוד מקור</strong> – לא לערוך שינוי, תיקון, הנדסה חוזרת, הידור חוזר, פירוק או Reverse Engineering של התוכנה או כל חלק ממנה, ולא לנסות לגלות את קוד המקור של התוכנה או ליצור יצירה נגזרת ממנה, אלא אם וככל שהדבר הותר במפורש לפי דין קוגנטי שאינו ניתן להתניה.</p>
+            <p><strong>חריגה מהיקף הרישיון</strong> – לא להשתמש בתוכנה בהיקף או באופן החורג מההרשאות שנרכשו. בין היתר, המשתמש לא יאפשר שימוש בתוכנה ליותר משתמשים, עמדות קצה, אתרים או התקנים מכפי שהותר במסגרת חבילת הרישיון שרכש; ולא יאפשר שימוש בפונקציות, רכיבים או מודולים מעבר לאלה הכלולים בחבילה שרכש, אלא לאחר שדרוג רישיון ותשלום התוספת המתאימה.</p>
+            <p><strong>שימוש בלתי חוקי או מזיק</strong> – לא לעשות שימוש בתוכנה לצורך כל פעולה בלתי חוקית, בלתי מורשית, או כזו העלולה להזיק לחברה או לכל צד שלישי. בכלל זה, המשתמש לא ישתמש בתוכנה באופן המפר כל דין, תקנה או צו שיפוטי, או כל זכות של צד שלישי – לרבות (אך לא רק) זכויות קניין רוחני של צדדים שלישיים, זכויות פרטיות, או דינים בתחום אבטחת המידע. כמו כן, המשתמש לא ישתמש בתוכנה באופן שעלול לגרום לפגיעה, שיבוש, נזק, השבתה או עומס יתר על שרתי החברה או על התוכנה עצמה.</p>
+            <p><strong>מנגנוני הגנה</strong> – לא לעקוף, לנטרל, לשבש או להסיר כל אמצעי אבטחה, הצפנה, בקרת שימוש או מנגנון הגנה אחר הכלול בתוכנה. המשתמש לא ינסה לעקוף מגבלות טכניות בתוכנה או לבצע פעולה שנועדה לאפשר שימוש בתוכנה בדרך שאינה מורשית במפורש בהסכם זה.</p>
+            <p>הפרת סעיף 3 (על תתי-סעיפיו) תהווה הפרה יסודית ומהותית של ההסכם. במקרה של הפרה כאמור, בנוסף לכל סעד אחר על פי דין, החברה תהיה רשאית לבטל לאלתר את הרישיון ואת זכות השימוש של המשתמש בתוכנה, מבלי שהדבר יגרע מחובותיו והתחייבויותיו של המשתמש (לרבות חובת התשלום עבור הרישיון במלואו), ומבלי לגרוע מכל תרופה אחרת העומדת לחברה לפי דין.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">4. תנאי רישיון, תשלום ואספקה</h4>
+            <p><strong>4.1 חבילות רישוי</strong> – החברה רשאית להציע את התוכנה במתכונת של חבילות או רמות רישיון שונות (לדוגמה: גרסה בסיסית, מקצועית, ארגונית וכיו"ב), העשויות להשתנות בהיקף הפונקציונליות, במספר המשתמשים המורשים, במשך הרישיון או בכל פרמטר אחר. זכויות השימוש שהוענקו למשתמש מוגבלות לחבילה ולתנאים כפי שנרכשו על ידו ואושרו על-ידי החברה. על המשתמש לוודא כי היקף הרישיון שרכש תואם את צרכיו, וכי אינו עושה שימוש החורג מכך (כאמור בסעיף 3 לעיל).</p>
+            <p><strong>4.2 דמי רישיון ותשלומים</strong> – כתנאי לקבלת הרישיון ולהמשך תוקפו, ישלם המשתמש לחברה במועד את דמי הרישיון או דמי המנוי כפי שנקבעו בהצעת המחיר, במחירון החברה או בהזמנת הרכישה הרלוונטית. אופן התשלום יהיה בהתאם לתנאים שהוגדרו על-ידי החברה (לדוגמה: תשלום חד-פעמי מראש עבור רישיון תמידי, או תשלום תקופתי חודשי/שנתי עבור רישיון מנוי מתחדש). כל המחירים נקובים לפני מיסים והיטלים – המשתמש אחראי לשלם כל מס החל (כגון מע"מ) בנוסף לתמורה, אלא אם צוין במפורש כי המחיר כולל מע"מ.</p>
+            <p><strong>4.3 מדיניות החזרים</strong> – אלא אם צוין במפורש אחרת בכתב על-ידי החברה או כנדרש על פי דין, דמי הרישיון אינם ניתנים להחזרה. המשתמש מאשר ומסכים כי לא תהיה לו זכות לקבלת החזר כספי עבור תשלומים ששילם, בין אם החליט להפסיק להשתמש בתוכנה לפני תום תקופת הרישיון ובין אם מכל סיבה אחרת, למעט במקרים בהם החוק מחייב החזר או שהחברה, לפי שיקול דעתה, החליטה להעניק החזר כאמור. למען הסר ספק, אם וככל שהמשתמש הוא "צרכן" הזכאי לבטל את עסקת רכישת הרישיון בהתאם לחוק הגנת הצרכן ותקנותיו (למשל בעסקת מכר מרחוק בתוך המועדים הקבועים בדין), יבוטלו העסקה ודמי הרישיון יוחזרו בכפוף ובהתאם להוראות הדין (ובכלל זה זכות החברה לגבות דמי ביטול בשיעור המותר בחוק).</p>
+            <p><strong>4.4 פיגור בתשלום</strong> – אי-תשלום במועדו של כל סכום המגיע לחברה על פי הסכם זה ייחשב כהפרה מהותית של ההסכם. במקרה של פיגור או מחדל תשלומים, תהיה החברה רשאית, מבלי לגרוע מכל סעד אחר העומד לרשותה, להשהות או לחסום את גישת המשתמש לתוכנה, לבטל לאלתר את הרישיון שניתן, ולדרוש מהמשתמש לשלם את כל סכום הפיגורים בתוספת ריבית והפרשי הצמדה כפי שמותר על פי דין. כמו כן, המשתמש ישפה את החברה על כל הוצאה שתיגרם לה לצורך גביית החוב, לרבות הוצאות משפט ושכר טרחת עורכי דין.</p>
+            <p><strong>4.5 שינויים בתנאי הרישוי</strong> – החברה שומרת לעצמה את הזכות לעדכן מעת לעת את מחירי הרישיון, מבנה החבילות או תנאי התשלום, בהתאם לצורכי העסק ושיקול דעתה. לגבי רישיונות מתחדשים, תמסור החברה למשתמש הודעה מראש (לדוגמה, בדוא"ל הרשום במערכת) על כל שינוי מהותי כאמור לפני מועד החידוש הבא. במקרה של שינוי בתנאי הרישיון או במחירו, יהיה המשתמש רשאי לבחור אם לחדש את הרישיון בהתאם לתנאים החדשים בתום התקופה הנוכחית, או לבטל את החידוש לפני כניסת התנאים החדשים לתוקף. היעדר התנגדות או אי-ביטול מצד המשתמש ייחשבו להסכמה לתנאים המעודכנים החל ממועד החידוש.</p>
+            <p><strong>4.6 אספקת התוכנה</strong> – אלא אם סוכם אחרת, אספקת התוכנה תתבצע באמצעות הורדה דיגיטלית מאתר החברה או באמצעות קישור שיועבר למשתמש לאחר השלמת תהליך הרכישה והתשלום. ייתכן כי השימוש בתוכנה מצריך מפתח רישיון, קוד הפעלה או הרשמה מקוונת; במקרה כזה, תספק החברה למשתמש את פרטי הגישה או מפתחות הרישיון הדרושים, והמשתמש אחראי לשמור עליהם בסודיות (כמפורט בסעיף 3 לעיל בדבר איסור עקיפת אמצעי הגנה). החברה לא תישא באחריות לאובדן, דליפה או שימוש לרעה במפתחות הרישיון שנמסרו למשתמש.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">5. עדכונים, שדרוגים ותמיכה</h4>
+            <p><strong>5.1 עדכוני תוכנה</strong> – החברה רשאית, לפי שיקול דעתה, לפתח ולהפיץ מעת לעת גרסאות מתוקנות או משופרות של התוכנה, לרבות תיקוני באגים, שיפורי אבטחה, עדכונים שוטפים או שדרוגים בעלי פונקציונליות חדשה (להלן יחד: "עדכונים").</p>
+            <p><strong>5.2 זכאות לעדכונים</strong> – אם למשתמש יש רישיון תקף ובתוקף (לדוגמה, מנוי פעיל או אחריות בתוקף), יהיה המשתמש זכאי לקבל מהחברה, ללא תשלום נוסף, את כל העדכונים הרלוונטיים לאותה גרסת תוכנה או לאותה חבילת רישיון שרכש, ככל שהחברה תפיץ עדכונים כאלה במהלך תקופת הרישיון. עדכונים אלו יכולים לכלול שיפורים ותיקונים בתוכנה הנוכחית.</p>
+            <p><strong>5.3 שדרוגים מהותיים</strong> – החברה שומרת לעצמה את הזכות להציע שדרוגים מהותיים או גרסאות חדשות לחלוטין של התוכנה כמוצרים נפרדים או במסגרת חבילות רישיון אחרות. ייתכן ששדרוג משמעותי (למשל, מעבר לגרסה עיקרית חדשה) לא ייכלל באופן אוטומטי במסגרת הרישיון הנוכחי של המשתמש, ועשוי לדרוש רכישת רישיון חדש או תשלום נוסף. החברה תודיע למשתמש על אפשרויות השדרוג הזמינות, ותינתן למשתמש הבחירה אם לרכוש שדרוג כזה אם לאו.</p>
+            <p><strong>5.4 אין התחייבות לעדכון</strong> – החברה אינה מתחייבת לפתח, לספק או לתמוך בכל עדכון, תיקון או שדרוג מסוים. מבלי לגרוע מהאמור, החברה רשאית בכל עת להחליט על שינוי, צמצום, הוספה או הסרה של פונקציות או תכונות בתוכנה במסגרת עדכון, או להחליט על הפסקת מתן עדכונים ו/או תמיכה לתוכנה (כולה או חלקה), בכפוף למתן הודעה סבירה מראש למשתמשים בעלי רישיון תקף. שינוי או הפסקה כאמור לא ייחשבו כהפרת ההסכם מצד החברה, ובלבד שהמשתמש יוכל להמשיך להשתמש בתוכנה כפי שסופקה לו בעת רכישת הרישיון.</p>
+            <p><strong>5.5 תמיכה טכנית</strong> – ככל שהחברה מציעה שירותי תמיכה טכנית בנוגע לתוכנה (כגון סיוע בהתקנה, מענה לתקלות, עדכוני גרסה וכד'), שירותים אלה יינתנו בהתאם למדיניות התמיכה של החברה כפי שהיא עשויה להשתנות מעת לעת. אם שירותי תמיכה כלשהם נכללים בחבילת הרישיון שרכש המשתמש, החברה תספקם לפי התנאים שפורסמו (לדוגמה, שעות פעילות, אמצעי הפנייה, סוגי התקלות הנתמכות). החברה אינה מתחייבת לספק תמיכה מעבר למה שהוגדר במדיניותה, ואינה נושאת באחריות לאי-זמינות זמנית של שירותי התמיכה.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">6. תקופת ההסכם, חידוש וביטול</h4>
+            <p><strong>6.1 תקופת הרישיון</strong> – תקופת הרישיון תיקבע בהתאם לסוג ולחבילת הרישיון שרכש המשתמש. לדוגמה, ייתכן רישיון למספר בלתי מוגבל של זמן (רישיון תמידי) עבור גרסה מסוימת של התוכנה; או רישיון למנוי מוגבל בזמן, כגון מנוי שנתי או חודשי, המתחדש באופן אוטומטי. תקופת הרישיון תחל במועד אספקת התוכנה למשתמש או במועד התשלום הראשון (המוקדם מביניהם), אלא אם צוין אחרת במסמכי העסקה.</p>
+            <p><strong>6.2 חידוש אוטומטי</strong> – אם מדובר ברישיון מבוסס-מנוי או בכל רישיון מוגבל בזמן הניתן לחידוש, הוא יתחדש באופן אוטומטי בתום כל תקופה לעוד תקופה זהה, בתנאים הזהים או המעודכנים התקפים באותה עת, אלא אם אחד הצדדים הודיע למשנהו בכתב על כוונתו שלא לחדש את ההסכם. משתמש המבקש למנוע חידוש אוטומטי של רישיון מתחדש ימסור לחברה הודעת ביטול בכתב לפחות 30 ימים לפני מועד סיום התקופה הנוכחית. במקרה של אי-מתן הודעה במועד כאמור, יחודש הרישיון אוטומטית והמשתמש יחויב בגין תקופת המנוי הנוספת.</p>
+            <p><strong>6.3 ביטול ביוזמת המשתמש</strong> – המשתמש רשאי לבטל רישיון בכל עת לפני תום תקופתו, דרך האיזור האישי באתר. עם זאת, מוסכם כי ביטול רישיון לפני תום התקופה ששולמה לא יקנה למשתמש זכות להחזר כספי עבור הזמן הנותר שלא נוצל, למעט אם הדבר נדרש במפורש על פי דין או במקרה שהחברה, לפי שיקול דעתה, החליטה לספק החזר כאמור. ביטול רישיון מתחדש על-ידי המשתמש ייכנס לתוקף בתום תקופת הרישיון הנוכחית, ובלבד שהודעת הביטול נמסרה בפרק הזמן הקבוע בסעיף 6.2 לעיל. למען הסר ספק, אם המשתמש הוא "צרכן" והרישיון מהווה עסקת שירות מתמשכת כהגדרתה בדין, הביטול יבוצע בהתאם להוראות הדין (ובכלל זה החזר חלק יחסי של התמורה ששולמה עבור התקופה שנותרה, וניכוי דמי ביטול אם מותר בגינם על פי דין).</p>
+            <p><strong>6.4 ביטול או השהיה ביוזמת החברה עקב הפרה</strong> – מבלי לגרוע מזכויותיה לפי כל דין או הסכם, החברה רשאית לבטל לאלתר את הרישיון או את ההסכם, או לחלופין להשהות את זכות השימוש של המשתמש בתוכנה, באמצעות מתן הודעה בכתב, במקרה שהמשתמש הפר הפרה מהותית תנאי מתנאי ההסכם. הפרה מהותית כוללת, בין היתר, הפרה של התחייבויות המשתמש לפי סעיפים 2 או 3 לעיל (הגנה על קניין רוחני והגבלות שימוש), או אי-תשלום במועד לפי סעיף 4. במקרה של ביטול הרישיון עקב הפרת המשתמש, לא יהיה המשתמש זכאי לכל החזר של דמי הרישיון (או כל חלק מהם), והוא יישא באחריות מלאה לכל נזק או הוצאה שייגרמו לחברה עקב ההפרה.</p>
+            <p><strong>6.5 ביטול מטעמי החברה (ללא הפרה)</strong> – החברה רשאית לבטל הסכם זה או רישיון ספציפי כלשהו, לפי שיקול דעתה, מכל סיבה אחרת שאינה עקב הפרת המשתמש, באמצעות הודעה בכתב של 60 ימים מראש. במקרה כזה, ככל שהמשתמש מחזיק במנוי או ברישיון בתוקף מעבר למועד הביטול, תחזיר החברה למשתמש את החלק היחסי מדמי הרישיון עבור התקופה ששולמה מראש וטרם נוצלה לאחר מועד הביטול. החזר זה (אם יינתן) יהווה את מלוא הפיצוי המוסכם למשתמש בגין ביטול הרישיון על-ידי החברה, והמשתמש מוותר על כל טענה או סעד נוספים בגין ביטול כאמור.</p>
+            <p><strong>6.6 תוצאות סיום ההסכם</strong> – עם תום תקופת הרישיון (אם לא חודש) או עם ביטול ההסכם מכל סיבה שהיא, יפקעו לאלתר כל זכויות המשתמש על פי הסכם זה. המשתמש יפסיק מיד כל שימוש בתוכנה, יסיר וימחק ממחשבייו וממערכותיו כל עותק של התוכנה, ויימנע מכל שימוש נוסף בה. לפי דרישת החברה, ימסור המשתמש לחברה תצהיר בכתב המאשר כי חדל להשתמש בתוכנה וכי מחק והשמיד את כל העותקים שברשותו. סעיפים המכוונים מטבעם להמשיך ולחול גם לאחר סיום ההסכם, לרבות (אך לא רק) סעיפי הקניין הרוחני (2), הגבלות השימוש (3), מדיניות ההחזרים (4.3), היעדר אחריות (7), הגבלת אחריות (8), שיפוי (9), וסמכות שיפוט וברירת דין (10), יישארו בתוקפם גם לאחר סיום או ביטול הסכם זה. סעיפי פרטיות (12) הרלוונטיים ימשיכו לחול על הצדדים גם לאחר תום ההסכם, בהתאם להוראותיהם.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">7. כתב ויתור על אחריות מצד החברה</h4>
+            <p><strong>7.1 התוכנה ניתנת "כמו שהיא"</strong> – המשתמש מצהיר ומסכים כי התוכנה מסופקת לו במצב "As-Is", עם כל הפגמים האפשריים, וכי השימוש בתוכנה נעשה לפי שיקול דעתו ואחריותו הבלעדית. החברה אינה מציגה כל מצג ואינה נותנת כל הבטחה או התחייבות שהתוכנה תתאים לצורכי המשתמש, תשיג תוצאות מסוימות, תפעל ללא תקלות או הפרעות, או שתהיה נקייה משגיאות. האחריות לבדיקת התאמת התוכנה לצרכיו ודרישותיו של המשתמש מוטלת על המשתמש בלבד.</p>
+            <p><strong>7.2 ויתור על אחריות מפורשת ומשתמעת</strong> – במידה המקסימלית המותרת על פי הדין החל, החברה, מנהליה, עובדיה, בעלי מניותיה, ספקיה, קבלני המשנה שלה ומפיציה לא יישאו בכל אחריות – בין אם מפורשת ובין אם משתמעת – בקשר לתוכנה, לתפקודה, לאיכותה, לביצועיה או לתוצאות שיושגו משימוש בה. בכלל זה, החברה אינה מתחייבת ואינה אחראית, במפורש או במשתמע, ביחס לעניינים הבאים (רשימה חלקית): (1) שהתוכנה מתאימה לסחירות או כשירה למכירה (Merchantability) ו/או מתאימה למטרה מסוימת של המשתמש (Fitness for a Particular Purpose); (2) שזכויות צדדים שלישיים (כגון זכויות יוצרים או פטנטים) אינן מופרות; (3) שהתוכנה תעבוד באופן נטול שגיאות או הפרעות, או שכל תקלה בתוכנה תתוקן; (4) שאבטחת המידע בתוכנה תהיה הרמטית מפני חדירות או וירוסים; (5) שהשימוש בתוכנה יניב תוצאות מדויקות או אמינות; וכן (6) כל אחריות משתמעת אחרת בנוגע לאיכות, לדיוק, למהימנות, לעדכניות, לשלמות או לביצועים של התוכנה. כל האחריות, התנאים והמצגים אשר אינם נקובים במפורש בהסכם זה – מוקנים ומבוטלים בזאת.</p>
+            <p><strong>7.3 מגבלות נוספות</strong> – החברה לא תישא באחריות לכל נזק או אובדן הנובעים מ: שימוש שגוי או בלתי מורשה של המשתמש בתוכנה; שילוב התוכנה עם חומרה או תוכנה אחרת שאינה תואמת לדרישות המערכת המומלצות; כשל של המשתמש בשמירה ובגיבוי נתוניו; או מכל גורם שאינו בשליטת החברה. החברה אינה אחראית לכל תוכן, מידע או תוצאה שהמשתמש מפיק או מעבד באמצעות התוכנה, והשימוש בכל תוצר כזה הוא על אחריותו הבלעדית של המשתמש.</p>
+            <p><strong>7.4 אחריות שאינה ניתנת לוויתור</strong> – אם וככל שהדין החל על הסכם זה אינו מתיר החרגה של אחריות מסוימת (כגון אחריות על-פי חוק הגנת הצרכן לגבי מוצר פגום, אם חלה ואינה ניתנת לוויתור), תגביל החברה את אחריותה עצמה אך ורק להיקף ולתקופה המינימליים הנדרשים לפי אותו דין, ולא מעבר לכך. בשום מקרה לא יתפרש האמור בהסכם זה כהרחבת אחריות שהדין מחייב מעבר למינימום הקוגנטי.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">8. הגבלת אחריות (Limitation of Liability)</h4>
+            <p><strong>8.1 פטור מאחריות לנזקים</strong> – על אף כל הוראה אחרת בהסכם זה, בשום מקרה (ובכפוף לכל דין קוגנטי החל) לא תחול על החברה, מנהליה, עובדיה, בעלי מניותיה, ספקיה, מפיציה או על כל מי מטעמה אחריות בגין נזקים כלשהם שעלולים להיגרם למשתמש או לכל צד שלישי, בקשר לתוכנה זו, לשימוש בה או לאי-היכולת להשתמש בה, לתפקודה הלקוי, או בקשר להסכם זה.</p>
+            <p><strong>8.2 סוגי הנזקים המוחרגים</strong> – הגבלת האחריות שבסעיף 8 זה חלה על כל סוגי הנזקים וההפסדים, מכל מין וסוג, בין אם ישירים או עקיפים, צפויים או בלתי צפויים, אגביים או תוצאתיים, מיוחדים או עונשיים. זאת לרבות – מבלי לגרוע מכלליות האמור – הנזקים הבאים: אובדן רווחים או הכנסות, אובדן מידע או נתונים, פגיעה או אובדן של קבצים, עלויות שיחזור נתונים, השבתת עסק או אובדן מוניטין, פגיעה בפרטיות או באבטחת מידע, ועלות רכישת שירותים או מוצרים חלופיים – והכל יהא הבסיס המשפטי של התביעה אשר יהא (חוזי, נזיקי – לרבות עוולת רשלנות, אחריות מוצר, או כל עילה אחרת), ואף אם נודע לחברה על האפשרות שייגרם נזק כזה.</p>
+            <p><strong>8.3 הגבלת סכום האחריות</strong> – במידה ובית משפט מוסמך או דין מחייב ימצא כי על החברה לשאת באחריות כלשהי כלפי המשתמש על פי הסכם זה, למרות ההחרגות דלעיל, אזי בהיקף המרבי שהדין מתיר, מוגבלת אחריותה הכספית המצטברת של החברה (לרבות של מנהליה, בעלי מניותיה וכל הפועלים מטעמה) – בסך הכול, עבור כל התביעות, העילות והנזקים יחדיו – לסכום השווה לסכום שבו חויב המשתמש ושילם בפועל לחברה עבור הרישיון או התוכנה ב־12 החודשים שקדמו למועד התרחשות האירוע שממנו נובעת האחריות (או אם מדובר ברישיון חד-פעמי ללא תקופת מנוי – לסכום ששילם המשתמש עבור הרישיון). הגבלה זו תחול כהגבלה כוללת על כל סכומי האחריות גם יחד (ולא פר נזק או פר אירוע), והיא מהווה את אחריותה המצטברת והמקסימלית של החברה.</p>
+            <p><strong>8.4 סעד יחיד ובלעדי</strong> – מובהר ומוסכם בין הצדדים כי הסעד היחיד והבלעדי העומד לרשות המשתמש בגין כל הפרה של הסכם זה על-ידי החברה, או בגין כל עילה אחרת הקשורה באופן כלשהו לתוכנה או לשימוש בה, הוא הפסקת השימוש בתוכנה. בנוסף, אם חרף האמור לעיל המשתמש בכל זאת זכאי על פי דין לסעד כספי כלשהו, מסכימים הצדדים כי סעד זה יהיה מוגבל להחזר דמי הרישיון ששילם המשתמש עבור התקופה שבה נמנע ממנו השימוש בתוכנה (ככל ששילם עבור תקופה כזו וטרם ניצל אותה). המשתמש מוותר במפורש על כל סעד, זכות או תרופה אחרים שעשויים היו לעמוד לרשותו כנגד החברה, למעט כמפורט בסעיף זה וככל שהוויתור אינו אסור על פי דין.</p>
+            <p><strong>8.5 הבסיס להסכם</strong> – תנאי הגבלת האחריות הקבועים בסעיף 8 מהווים תנאי יסודי להסכם זה. הצדדים מצהירים כי לקחו תנאים אלה בחשבון בעת קביעת התמורה עבור הרישיון וכריתת ההסכם, וכי לולא הגבלת האחריות האמורה, לא הייתה החברה מתקשרת עם המשתמש בתנאים או בעלויות אלה. הגבלת האחריות תוסיף לחול ותישאר בתוקף גם לאחר תום תוקף הרישיון או ביטולו של הסכם זה, ללא הגבלת זמן.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">9. שיפוי ופיצוי</h4>
+            <p><strong>9.1 שיפוי על ידי המשתמש</strong> – המשתמש מתחייב לשפות ולפצות את החברה, מנהליה, עובדיה, בעלי מניותיה, ספקיה, מפיציה וכל מי מטעמם (להלן יחד: "הצדדים המפוצים"), מיד עם דרישתם הראשונה, בגין כל חבות, נזק, הפסד, אובדן רווח, תשלום או הוצאה – לרבות הוצאות משפט ושכר טרחת עורכי דין – שייגרמו לצדדים המפוצים באופן ישיר או עקיף, עקב או בקשר עם האירועים הבאים: (1) הפרת אחד מתנאי הסכם זה על-ידי המשתמש; (2) שימוש של המשתמש בתוכנה באופן שאינו תואם את תנאי ההסכם או את הוראות הדין; (3) כל טענה, דרישה או תביעה של צד ג' כלשהו הנובעת ממעשה או ממחדל של המשתמש – לרבות, אך לא רק, טענה בדבר הפרת זכויות קניין רוחני, פגיעה בפרטיות או נזק שנגרם לצד ג' – בקשר עם שימושו של המשתמש בתוכנה. מבלי לגרוע מכלליות האמור, היה והחברה תחויב בפסק דין חלוט או בהסדר פשרה מחייב לשלם לכל צד שלישי סכום כסף או לספק טובת הנאה בקשר למעשה או למחדל של המשתמש או לשימושו בתוכנה – ישפה המשתמש את החברה במלוא הסכום וישלם לה כל סכום בו חויבה וכן את הוצאותיה. הוראות סעיף 9.1 זה אינן גורעות מכל זכות או סעד אחרים של החברה לפי דין.</p>
+            <p><strong>9.2 שיפוי על ידי החברה</strong> – בכפוף להוראות סעיף 8 לעיל, החברה תגן על המשתמש ותשפה אותו בגין כל אובדן או הוצאה (לרבות שכר טרחת עורכי דין סבירים) שייפסקו לחובת המשתמש בפסק דין סופי של בית משפט מוסמך, בשל תביעה של צד שלישי הטוען כי השימוש המורשה של המשתמש בתוכנה, כפי שסופקה על-ידי החברה ובלא שינוי, מפר באופן ישיר זכויות יוצרים רשומות או פטנט תקף של אותו צד שלישי. שיפוי זה מותנה בכך שהמשתמש הודיע לחברה מיד עם קבלת כל טענה או תביעה כזו, איפשר לחברה ולנציגיה לנהל את ההגנה או המשא ומתן לפשרה, ושיתף פעולה באופן סביר עם החברה במסגרת זו. אם תוגש נגד המשתמש תביעה בטענה שהשימוש בתוכנה מפר זכות קניין רוחני של צד שלישי, החברה רשאית, לפי שיקול דעתה, לנקוט באחד או יותר מהצעדים הבאים: (1) להשיג עבור המשתמש רישיון תקף שיאפשר את המשך השימוש בתוכנה; (2) לשנות או להחליף את התוכנה באופן שימנע את ההפרה הנטענת, ובלבד שהפונקציונליות לא תיפגע באופן מהותי; או (3) לבטל את הרישיון לתוכנה, לקבל את התוכנה חזרה מן המשתמש, ולהשיב למשתמש כל סכום ששילם עבור התקופה שלא נוצלה בגין הרישיון. אם החברה נקטה בצעד מן המנויים לעיל, לא תהיה למשתמש כל טענה נוספת כלפי החברה בקשר לאותה תביעה. שיפוי החברה לא יחול במקרים שבהם התביעה נגד המשתמש נובעת (א) מהפרת ההסכם או שימוש בתוכנה בניגוד לתנאיו; (ב) משימוש בתוכנה בגרסה שלא עודכנה על-ידי החברה, אם העדכון היה מונע את ההפרה; או (ג) משילוב או מהפעלה של התוכנה עם חומרה או תוכנה שלא סופקו או אושרו על-ידי החברה. סעיף 9.2 זה ממצה את אחריותה וסעדיה של החברה כלפי המשתמש במקרה של תביעה בגין הפרת זכויות קניין רוחני של צד שלישי עקב שימוש בתוכנה, והמשתמש מסכים כי למעט האמור בסעיף זה לא תהיה לו כל עילה או סעד נוספים כלפי החברה בגין טענה להפרת זכויות קניין רוחני כתוצאה משימוש בתוכנה.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">10. דין ויישוב סכסוכים</h4>
+            <p><strong>10.1 דין חל</strong> – על ההסכם, פרשנותו, ביצועו ועל כל סכסוך הנובע ממנו או הקשור אליו (ובכלל זה שימוש המשתמש בתוכנה), יחולו אך ורק דיני מדינת ישראל. תחולתן של הוראות ברירת דין (קוליזיה) של המשפט הבינלאומי הפרטי – מוחרגת בזאת, כך שלא תאפשר החלת דינים זרים. כמו כן, לא יחול על הסכם זה אמנת האו"ם בדבר מכר טובין בינלאומי (CISG).</p>
+            <p><strong>10.2 יישוב מחלוקות בדרכי נועם</strong> – הצדדים יעשו מאמץ בתום לב ליישב כל מחלוקת או סכסוך הנובע מהסכם זה במשא ומתן ישיר ובדרכי נועם, תוך 30 ימים ממועד מתן הודעה בכתב על קיומה של מחלוקת. אם בתוך תקופה זו (או פרק זמן סביר נוסף, ככל שהצדדים הסכימו) לא יגיעו הצדדים לפתרון מוסכם, יהיה כל צד רשאי להעביר את הסכסוך להליך הקבוע בסעיף 10.3 להלן.</p>
+            <p><strong>10.3 בוררות</strong> – כל סכסוך, מחלוקת או תביעה הנובעים מהסכם זה או מהשימוש בתוכנה ושלא נפתרו בהסכמה כאמור לעיל, ייושבו במסגרת בוררות שתהיה סופית ומחייבת. הבוררות תתנהל בהתאם לחוק הבוררות, התשכ"ח–1968, בפני בורר יחיד. הבורר ייבחר בהסכמה בין הצדדים. אם בתוך 30 יום מדרישת אחד הצדדים לקיים בוררות לא יגיעו הצדדים להסכמה על זהות הבורר – ימונה הבורר על-ידי ראש לשכת עורכי הדין בישראל (לבקשת אחד הצדדים). הבוררות תתקיים בישראל, במקום שייקבע על-ידי הבורר (ובחירתו תהיה, ככל הניתן, במקום הנוח יחסית לשני הצדדים; אם לא נקבע אחרת, מקום הבוררות יהיה בעיר תל אביב). שפת הבוררות תהיה עברית, ודיני מדינת ישראל יחולו. הבורר לא יהיה קשור בדיני הראיות או בסדרי הדין האזרחי, אך יהיה חייב לנמק את פסק הבוררות. פסק הבורר יהיה סופי ויכול להינתן כפסק דין בבית משפט מוסמך. על אף האמור לעיל, מוסכם כי כל צד רשאי לפנות בכל עת לבית משפט מוסמך בבקשה לסעד זמני או לצו מניעה דחוף, לפי הצורך, כדי להגן על זכויותיו או למנוע נזק בלתי הפיך. במיוחד, מובהר כי החברה רשאית לפנות לערכאה שיפוטית מוסמכת לצורך קבלת צו מניעה או צו עשה בכל מקרה של הפרה או איום בהפרה של התחייבויות המשתמש לפי סעיפים 2 או 3 לעיל, וזאת בנוסף לכל סעד אחר העומד לרשותה.</p>
+            <p><strong>10.4 סמכות שיפוט</strong> – בכפוף לסעיף 10.3 לעיל (בוררות), לבתי המשפט המוסמכים במחוז תל אביב (מדינת ישראל) תהיה סמכות השיפוט הבלעדית והייחודית לדון בכל סכסוך, תובענה ועניין הנובעים מהסכם זה או מהשימוש בתוכנה. שני הצדדים מסכימים באופן בלתי חוזר לציית לסמכות השיפוט הבלעדית של בתי המשפט האמורים, ומוותרים על כל טענה בדבר פורום בלתי נאות או כל טענה לבחירה או שינוי של מקום השיפוט. סעיף זה אינו גורע מכל זכות שעלולה להיות למשתמש, בהיותו "צרכן" כהגדרתו בדין, לפנות בערכאה שיפוטית מוסמכת אחרת בהתאם להוראות דין קוגנטיות.</p>
+            <p><strong>10.5 שפת ההסכם</strong> – הסכם זה נערך בשפה העברית, שהיא השפה המחייבת לצורך פרשנותו. ככל שההסכם יתורגם לשפה אחרת לשם נוחות המשתמש או דרישת הדין – הנוסח העברי הוא שיגבר, ובמקרה של סתירה בין הנוסח העברי לנוסח המתורגם, יפורש ההסכם בהתאם לנוסחו בשפה העברית בלבד.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">11. שונות</h4>
+            <p><strong>11.1 מלוא ההסכמה</strong> – הסכם זה, לרבות נספחיו (אם ישנם), ממצה באופן בלעדי את מלוא ההבנות וההסכמות בין החברה לבין המשתמש ביחס לנושא ההסכם – הוא רישיון השימוש בתוכנה – והוא גובר על כל הסכמה, מצג, התחייבות, הבטחה, תנאי שימוש, תקנון או מסמך אחר (בין בכתב ובין בעל-פה) שקדם לו ונוגע לנושא ההסכם. כל שינוי, תיקון, תוספת או ויתור על תנאי מתנאי הסכם זה יהיו בני תוקף רק אם נעשו בכתב ובחתימת שני הצדדים.</p>
+            <p><strong>11.2 ויתור ואי-אכיפה</strong> – כל ויתור, דחייה, ארכה או הנחה מצד החברה בקשר להפרה של ההסכם על-ידי המשתמש, או הימנעות זמנית ממימוש זכות מזכויותיה, לא ייחשבו כוויתור קבוע על זכויות כלשהן על פי הסכם זה, ולא ייצרו השתק או מניעות כנגד החברה. הימנעות החברה ממימוש זכות המוקנית לה על פי ההסכם או על פי דין במקרה מסוים, לא תהווה תקדים למקרה אחר או ויתור על מימוש אותה זכות בעתיד. כל ויתור על זכות או הסכמה להפרה יהיה בתוקף רק אם ניתן בכתב ומפורשות.</p>
+            <p><strong>11.3 ניתוק סעיפים (סוורביליות)</strong> – אם ייקבע על-ידי בית משפט מוסמך או רשות מוסמכת אחרת שהוראה כלשהי בהסכם זה אינה חוקית, בטלה או בלתי ניתנת לאכיפה, אזי אותה הוראה תבוטל או תגבל במידה המינימלית הנדרשת, כך ששאר הוראות ההסכם יישארו בתוקפן המלא וימשיכו לחייב את הצדדים. במקרה של הוראה בלתי אכיפה, מבקשים הצדדים מבית המשפט (או מהרשות המוסמכת) לאכוף את כוונת הצדדים הגלומה בהוראה המקורית, עד למידה המרבית המותרת על פי דין, גם אם באמצעות גרסה מתוקנת של אותה הוראה.</p>
+            <p><strong>11.4 העברת זכויות</strong> – המשתמש אינו רשאי להסב, להעביר, להמחות או לשעבד לאחר (לרבות לחברת בת, חברת אם, חברה אחודה או קשורה) את זכויותיו או חובותיו על פי הסכם זה, כולן או מקצתן, ללא הסכמה מוקדמת מפורשת ובכתב מאת החברה. כל ניסיון המחאה או העברה בניגוד לאמור – יהיה בטל ומבוטל. החברה, לעומת זאת, רשאית להעביר ו/או להמחות את זכויותיה והתחייבויותיה לפי הסכם זה (כולן או חלקן) לכל צד שלישי לפי בחירתה – לרבות במסגרת מיזוג, רכישת החברה, העברת פעילותה (כולה או חלקה) לאחר, או ארגון מחדש – ובלבד שהמחאה כאמור לא תפגע בזכויות המשתמש על פי הסכם זה. עם העברת הזכויות והחובות כאמור, תהיה החברה הנעברת אחראית לקיום התחייבויות החברה לפי ההסכם, והחברה המקורית תהיה פטורה ממילוי התחייבויותיה כלפי המשתמש, ככל שהועברו לחברה הנעברת.</p>
+            <p><strong>11.5 הודעות והתראות</strong> – כל הודעה, דרישה, אישור או מסמך שיש למסור על פי הסכם זה (להלן: "הודעה") ייעשה בכתב ויימסר ביד, באמצעות דואר רשום, בפקסימיליה או בדואר אלקטרוני. הודעה שנשלחה בדואר רשום תיחשב כמי שהגיעה ליעדה בתוך 3 ימי עסקים ממועד מסירתה למשלוח; הודעה במסירה ביד – ביום המסירה בפועל כנגד אישור קבלה; הודעה בפקס או בדוא"ל – ביום העסקים הראשון לאחר אישור קבלה אלקטרוני. כתובת הצדדים לצורך משלוח הודעות היא כפי המצויין במבוא להסכם זה, אלא אם יודיע צד למשנהו בכתב על כתובת אחרת.</p>
+            <p><strong>11.6 יחסי הצדדים</strong> – הצדדים להסכם זה הם קבלנים עצמאיים. שום דבר בהסכם זה, או בהתנהגות מי מהצדדים לפיו, אינו יוצר בין החברה לבין המשתמש יחסי עבודה, שליחות, שותפות, מיזם משותף, נאמנות, הנהלה משותפת, יחסי ספק-מפיץ בלעדיים, או כל מערכת יחסים אחרת מלבד זו שנקבעה מפורשות בהסכם זה (רישיון שימוש). המשתמש אינו רשאי להתחייב, ליצור חבות או לדבר בשם החברה בכל דרך שהיא, ולהפך.</p>
+            <p><strong>11.7 כותרות</strong> – כותרות הסעיפים ופרקי המשנה בהסכם זה ניתנו לשם הנוחות וההתמצאות בלבד, ואין לייחס להם משמעות פרשנית. כותרת סעיף אינה בהכרח ממצה את מלוא תוכן הסעיף, ואין להשתמש בה לשם פרשנות ההסכם.</p>
+            <p><strong>11.8 שימוש חוקי וציות לרגולציה</strong> – המשתמש מתחייב להשתמש בתוסף אך ורק למטרות חוקיות ולפעול בהתאם לכל דין החל עליו. באופן ספציפי, ומבלי לגרוע מכלליות האמור, על המשתמש לציית לכל חוק ורגולציה פיננסית החלים עליו, לרבות הוראות רגולציה פיננסית בישראל, ככל שהן חלות עליו. המשתמש יהיה האחראי הבלעדי לברר ולהבין את החובות הרגולטוריות והמשפטיות החלות עליו בקשר לשימוש בתוסף, ולוודא כי הוא מקיים אותן. החברה אינה אחראית ולא תהיה אחראית לוודא את ציות המשתמש לדין או ליידעו בדבר חובותיו החוקיות. כל אי-ציות של המשתמש לדינים או לרגולציות החלים עליו הוא באחריותו הבלעדית של המשתמש.</p>
+            <p><strong>11.9 העדר ייעוץ השקעות</strong> – המשתמש מצהיר ומסכים שהחברה אינה מספקת ייעוץ השקעות, ייעוץ פיננסי או שירותים פיננסיים כלשהם המחייבים רישוי. התוסף, התוכנה, וכן כל מידע, נתון, ניתוח או תוצאה המופקים באמצעותם, ניתנים לצורכי מידע כלליים בלבד ואינם מהווים ייעוץ להשקעה, המלצה לביצוע פעולות או הצעה לקבלת החלטות פיננסיות. החברה אינה משמשת כיועץ השקעות מוסמך או כסוכן השקעות, ולא מתקיימים בין החברה למשתמש יחסי ייעוץ או נאמנות בתחום ההשקעות. המשתמש לבדו אחראי להחלטותיו ולפעולותיו בשוק ההון או בפעילות מסחרית אחרת, ואין לראות בשימוש בתוסף כתחליף לייעוץ השקעות מקצועי המותאם למאפייניו האישיים של המשתמש.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">12. אי-ייעוץ או ניהול השקעות; אחריות המשתמש</h4>
+            <p><strong>12.1 אי-ייעוץ או ניהול השקעות; אחריות המשתמש</strong> - המשתמש מצהיר ומאשר כי ידוע לו שהחברה אינה בעלת רישיון ייעוץ השקעות, שיווק השקעות או ניהול תיקי השקעות, וכי היא אינה מספקת לו שירותי ייעוץ השקעות, המלצות להשקעה, שיווק השקעות, ניהול תיק השקעות או כל שירות אחר המחייב רישוי לפי דין. החברה משמשת אך ורק כספק תוכנה טכנולוגית אוטומטית, והפעלת התוכנה על-ידי המשתמש אינה יוצרת יחסי יועץ-לקוח או יחסי נאמנות מכל סוג. בהתאמה, לא יחולו על החברה החובות החלות על "בעל רישיון" לפי חוק הייעוץ, אלא רק ההתחייבויות המפורשות בהסכם זה.</p>
+            <p><strong>12.2</strong> כל מידע, נתון, ניתוח, סימולציה, התראה, איתות או תוצאה אחרת שהתוכנה מציגה או מפיקה ניתנים למשתמש לצורכי מידע כלליים ועזר תפעולי בלבד. מידע ותוצאות אלה אינם מהווים ולא ייחשבו כייעוץ להשקעה או כהמלצה מטעם החברה לבצע פעולה כלשהי בניירות ערך, נכסים פיננסיים או השקעות אחרות. החברה אינה מתיימרת לקבוע עבור המשתמש האם השקעה מסוימת מתאימה לו, ואינה מספקת כל חוות דעת אישית לגבי כדאיות השקעה פרטנית. האחריות לפרשנות השימוש במידע ובכלי התוכנה מוטלת על המשתמש בלבד.</p>
+            <p><strong>12.3</strong> החברה אינה מפעילה כל שיקול דעת עצמאי בנוגע לפעולות מסחר בחשבון ההשקעות של המשתמש. ככל שהתוכנה מבצעת פעולות באופן אוטומטי, הדבר נעשה אך ורק בהתאם להנחיות, לכללים או לפרמטרים שהגדיר המשתמש מראש (לדוגמה: פקודות מותנות, קריטריונים שקבע המשתמש באלגוריתם, וכיו"ב). החברה עצמה אינה מקבלת החלטות לקנות, למכור או להחזיק נכס פיננסי עבור המשתמש, ואינה משנה או מתאימה את הוראות המשתמש. למשתמש שליטה מלאה על הפעלת התוכנה – באפשרותו לקבוע, לערוך, להשהות או לבטל בכל עת את ההוראות והתנאים לביצוע פעולות. מובהר כי המשתמש הוא האחראי הבלעדי להגדרת תנאי המסחר בתוכנה, וכן להפעלה או להפסקה של המסחר האוטומטי בחשבונו.</p>
+            <p><strong>12.4</strong> למען הסר ספק, החברה אינה מנהלת בפועל את השקעותיו או תיקו של המשתמש. התוכנה אינה מהווה "מנהל תיקים" אלגוריתמי, אלא כלי טכני בידי המשתמש. המשתמש לא יתפרש כלפי החברה או כלפי צד שלישי כלשהו כמי שהאציל לחברה סמכות לקבלת החלטות השקעה עבורו. החברה אינה צד לשיקוליו העסקיים של המשתמש ואינה מבטיחה השגת תשואה, מניעת הפסד או כל תוצאה אחרת. המשתמש מסכים כי לא יראה בפעילות החברה משום ניהול השקעות או ייעוץ השקעות הנעשה עבורו.</p>
+            <p><strong>12.5 אחריות החלטות והשקעות</strong>. המשתמש לבדו נושא באחריות מלאה ובלעדית לכל החלטה, פעולה או אי-פעולה הננקטת על ידו או באמצעות התוכנה בחשבון ההשקעות שלו. המשתמש מתחייב לקבלת החלטות השקעה באופן עצמאי, לאחר שקילה ובדיקה המתאימים לו, והוא מודע לכך שכל שימוש בתוכנה הינו כלי עזר בלבד שאינו מחליף שיקול דעת עצמאי או ייעוץ מקצועי מותאם אישית. המשתמש מוותר בזאת על כל טענה כי הסתמך על החברה בקבלת החלטות השקעה. היה והמשתמש יבקש ייעוץ השקעות המתחשב בנסיבותיו האישיות, הוא אחראי לפנות ליועץ השקעות מוסמך מטעמו.</p>
+            <p><strong>12.6 שיפוי והגנה</strong>. המשתמש ישפה ויגן על החברה, מנהליה, עובדיה וכל מי מטעמה, מפני כל טענה, תביעה, הפסד או נזק (לרבות הוצאות משפט סבירות) הנובעים מטענה של צד שלישי או של המשתמש עצמו שהחברה פעלה כיועץ השקעות או מנהל השקעות כלפי המשתמש, בניגוד למוסכם לעיל. סעיף שיפוי זה בא להבהיר את כוונת הצדדים כי האחריות על פעילות ההשקעה היא של המשתמש, וכי החברה נוקטת באמצעים חוזיים להתגונן מכל תביעה שתייחס לה תפקיד של מנהל או יועץ בלתי מורשה.</p>
+            
+            <h4 className="font-bold mt-4 text-primary">13. פרטיות ואבטחת מידע</h4>
+            <p><strong>13.1 איסוף ושימוש במידע</strong> – המשתמש מאשר ומסכים שהחברה רשאית לאסוף, לשמור ולעבד מידע הנוגע למשתמש ולעשיית שימוש בתוכנה, לרבות מידע אישי שמסר המשתמש במסגרת רכישת הרישיון או השימוש בתוכנה (כגון פרטי התקשרות, פרטי תשלום ונתוני שימוש בתוכנה). החברה תשתמש במידע זה לצרכים עסקיים פנימיים, לשיפור התוכנה והשירות, למתן תמיכה, לאכיפת זכויותיה על פי ההסכם ולמטרות נוספות המותרות על פי דין, והכול בהתאם למדיניות הפרטיות של החברה (ככל שקיימת) ולהוראות כל דין, לרבות חוק הגנת הפרטיות, התשמ"א–1981. המשתמש מסכים לכך שהחברה תעבד מידע אודותיו למטרות האמורות, ותנקוט אמצעים סבירים והולמים לשמור על סודיות המידע ולהגן עליו. החברה לא תעביר מידע אישי מזהה אודות המשתמש לצדדים שלישיים, למעט ככל שהדבר נדרש לצורך מתן השירותים או אכיפת הסכם זה (לדוגמה, העברת פרטי תשלום לגורם סליקה, נקיטת הליכים משפטיים) או אם היא מחויבת לעשות כן על פי דין או צו שיפוטי. המשתמש מסכים ומאשר שהחברה רשאית, במסגרת השימוש השוטף בתוכנה ובשירותים, להעביר ולאחסן מידע הנוגע למשתמש בשרתים ומרכזי מידע מחוץ לגבולות ישראל (כולל בענן), ובלבד שהחברה תנקוט באמצעי ההגנה הנדרשים בחוק להבטחת רמת הגנה נאותה על המידע.</p>
+            <p><strong>13.2 אבטחת מידע</strong> – החברה מיישמת אמצעי אבטחה סבירים והולמים להגנה על המידע שנאסף וכן על התוכנה, אך היא אינה מתחייבת שמערכותיה ותוכנתה חסינות באופן מוחלט בפני גישה בלתי-מורשית או חדירות זדוניות. בכפוף להוראות דין שאינן ניתנות להתניה, החברה לא תישא באחריות לכל נזק או אובדן נתונים עקב חדירה בלתי-מורשית, פריצה או תקלה אחרת שאינה בשליטת החברה. המשתמש מתחייב להשתמש בתוכנה בהתאם לכל דין החל עליו בתחום הפרטיות והגנת המידע. אם המשתמש מזין, מאחסן או מעבד באמצעות התוכנה מידע אישי של צדדים שלישיים, הוא מצהיר ומתחייב שיש בידיו את כל ההיתרים וההסכמות הנדרשים לפי דין למסירת מידע זה לחברה ולעיבודו על-ידה במסגרת מתן השירותים, וכי הוא ימלא אחר כל חובותיו כמחזיק ו/או כבעל מידע לפי חוק הגנת הפרטיות. המשתמש ישפה ויפצה את החברה, מיד עם דרישתה, בגין כל חבות, נזק או הוצאה – לרבות הוצאות משפט ושכר טרחת עורכי דין – שייגרמו לחברה עקב כל טענה או תביעה של צד שלישי כלשהו, הנובעת ממידע אישי של צד שלישי שהמשתמש מסר לחברה או עיבד באמצעות התוכנה בלא סמכות או היתר כדין.</p>
+            <p>לבירורים נוספים בנוגע להסכם זה ניתן ליצור קשר עם החברה בדוא"ל support@algotouch.co.il. הסכם זה מנוסח בלשון זכר לצרכי נוחות בלבד, והוא חל באופן שווה על כל מגדר וזהות. חתימת המשתמש או נציגו המורשה על גבי הסכם זה (או אישור מקוון מטעמו) מהווה הסכמה מלאה לכל תנאיו. הקפדה על תנאי ההסכם תבטיח יחסים תקינים בין המשתמש לחברה ותאפשר ניצול מיטבי ובטוח של התוכנה. המשתמש מצהיר כי קרא והבין את תנאי ההסכם וכי הוא מסכים להם מרצונו החופשי.</p>
+            <div className="mt-4">
+              <h4 className="font-bold text-center">הצהרה והתחייבות בלתי חוזרת של המשתמש:</h4>
+              <p className="mt-2">אני, המשתמש החתום מטה, מצהיר ומתחייב כלפי החברה באופן בלתי חוזר כדלקמן:</p>
+              <p className="mt-1">כל הפרטים שמסרתי בהסכם זה מלאים ונכונים.</p>
+              <p className="mt-1">קראתי בעיון את כל האמור בתנאי הרישיון ובהסכם זה. אני מאשר את כל האמור בהם; כל האמור בהם מקובל ומוסכם עליי, ואני מתחייב כלפי החברה, המפתח ומי מטעמם, באופן בלתי חוזר, לקיים את כל התנאים המפורטים בהם.</p>
+            </div>
+          </div>
+          {scrolledToBottom ? (
+            <div className="absolute bottom-2 right-2 bg-green-100 text-green-800 rounded-full p-1">
+              <Check className="h-4 w-4" />
+            </div>
+          ) : (
+            <div className="absolute bottom-2 right-2 animate-bounce">
+              <ArrowDown className="h-5 w-5 text-primary" />
+            </div>
+          )}
         </div>
 
-        <div className="space-y-4 text-sm">
-          <div>
-            <h4 className="font-semibold mb-2">פרטי המנוי:</h4>
-            <p>שם: {fullName}</p>
-            <p>חבילה: {planId === 'monthly' ? 'חודשית' : planId === 'annual' ? 'שנתית' : planId}</p>
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">פרטי החותם</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">שם מלא</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                value={userDetails.fullName}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">כתובת</Label>
+              <Input
+                id="address"
+                name="address"
+                value={userDetails.address}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="idNumber">מספר ת.ז / ח.פ</Label>
+              <Input
+                id="idNumber"
+                name="idNumber"
+                value={userDetails.idNumber}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">טלפון</Label>
+              <Input
+                id="phone"
+                name="phone"
+                value={userDetails.phone}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="email">דואר אלקטרוני</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={userDetails.email}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">חתימה דיגיטלית</h3>
+            <SignaturePad onChange={setSignature} />
           </div>
 
-          <div>
-            <h4 className="font-semibold mb-2">תנאי השירות:</h4>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>השירות מיועד למטרות מסחר ואינו מהווה יעוץ השקעות</li>
-              <li>המשתמש אחראי לכל ההחלטות הכספיות שיקבל</li>
-              <li>החברה אינה אחראית להפסדים או נזקים הנובעים משימוש בשירות</li>
-              <li>המנוי מתחדש אוטומטית אלא אם בוטל 24 שעות לפני תום התקופה</li>
-              <li>ביטול המנוי יכול להתבצע בכל עת דרך האזור האישי</li>
-            </ol>
+          <div className="space-y-4">
+            <div className="flex items-start space-x-2 space-x-reverse">
+              <Checkbox
+                id="terms"
+                checked={agreedToTerms}
+                onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="terms"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  אני מאשר/ת שקראתי את התנאים וההגבלות של ההסכם
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex items-start space-x-2 space-x-reverse">
+              <Checkbox
+                id="privacy"
+                checked={agreedToPrivacy}
+                onCheckedChange={(checked) => setAgreedToPrivacy(checked as boolean)}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="privacy"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  אני מאשר/ת את מדיניות הפרטיות
+                </label>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Signature section */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">חתימה דיגיטלית *</label>
-          <SignaturePad 
-            onChange={setSignature}
-            disabled={isSubmitting}
-          />
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2 space-x-reverse">
-            <Checkbox
-              id="terms"
-              checked={agreedToTerms}
-              onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
-              disabled={isSubmitting}
-            />
-            <label htmlFor="terms" className="text-sm">
-              אני מסכים לתנאי השירות *
-            </label>
-          </div>
-
-          <div className="flex items-center space-x-2 space-x-reverse">
-            <Checkbox
-              id="privacy"
-              checked={agreedToPrivacy}
-              onCheckedChange={(checked) => setAgreedToPrivacy(checked === true)}
-              disabled={isSubmitting}
-            />
-            <label htmlFor="privacy" className="text-sm">
-              אני מסכים למדיניות הפרטיות *
-            </label>
-          </div>
-        </div>
-
-        <Button
-          onClick={handleSubmit}
-          disabled={!signature || !agreedToTerms || !agreedToPrivacy || isSubmitting}
-          className="w-full"
+      </CardContent>
+      <CardFooter className="flex flex-col sm:flex-row gap-3 justify-between">
+        <Button 
+          variant="outline" 
+          type="button"
+          className="flex items-center gap-2"
+          onClick={downloadContract}
         >
-          {isSubmitting ? 'שומר חוזה...' : 'חתום ושמור חוזה'}
+          <Download className="h-4 w-4" />
+          הורדת עותק מההסכם
         </Button>
-      </div>
-    </div>
+        
+        <Button 
+          onClick={handleSign}
+          disabled={isSigningInProgress || !scrolledToBottom || !signature || !agreedToTerms || !agreedToPrivacy}
+          className="flex items-center gap-2"
+        >
+          {isSigningInProgress ? "מעבד..." : "חתום על ההסכם"}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 };
 
