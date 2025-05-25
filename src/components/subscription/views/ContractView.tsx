@@ -79,9 +79,9 @@ const ContractView: React.FC<ContractViewProps> = ({
       return;
     }
     
-    // Generate temp contract ID for session storage if in registration flow
+    // Generate proper UUID for temp contract ID if in registration flow
     if (isRegistering) {
-      enhancedContractData.tempContractId = `temp_contract_${Date.now()}`;
+      enhancedContractData.tempContractId = crypto.randomUUID();
       console.log('Generated temp contract ID:', enhancedContractData.tempContractId);
       
       try {
@@ -98,8 +98,10 @@ const ContractView: React.FC<ContractViewProps> = ({
     }
 
     try {
-      // Process the signed contract
-      const userId = user?.id || 'temp_user_' + Date.now();
+      // Use proper UUID for userId - either the authenticated user's ID or generate a proper UUID
+      const userId = user?.id || crypto.randomUUID();
+      console.log('Processing contract with userId:', userId);
+      
       const result = await processSignedContract(
         userId,
         selectedPlan,

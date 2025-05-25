@@ -69,18 +69,30 @@ export async function saveContractToDatabase(
     
     // Validate inputs
     if (!userId || !contractData?.contractHtml || !contractData?.signature) {
-      console.error('Missing required contract data');
+      console.error('Missing required contract data:', {
+        hasUserId: !!userId,
+        hasContractHtml: !!contractData?.contractHtml,
+        hasSignature: !!contractData?.signature
+      });
       return { success: false, error: 'Missing required contract data' };
+    }
+    
+    // Validate that userId is a proper UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      console.error('Invalid userId format, must be UUID:', userId);
+      return { success: false, error: 'Invalid user ID format' };
     }
     
     // Generate a unique contract ID to be used in URLs
     const contractId = crypto.randomUUID();
+    console.log('Generated contract ID:', contractId);
     
     // Try to upload HTML to storage
     const uploadResult = await uploadContractToStorage(userId, contractData.contractHtml, contractId);
     
     const pdfUrl = uploadResult.success ? uploadResult.url : null;
-    console.log(uploadResult.success ? 'Contract uploaded to storage' : 'Failed to upload contract to storage');
+    console.log(uploadResult.success ? 'Contract uploaded to storage successfully' : 'Failed to upload contract to storage:', uploadResult.error);
     
     // Store contract signature in the database
     const { data, error } = await supabase
@@ -130,7 +142,7 @@ export async function saveContractToDatabase(
       // Continue with the flow even if email fails
     }
     
-    // Update user metadata with link to the contract
+    // Try to update user metadata
     try {
       await updateUserMetadata(userId, {
         contractSignedId: contractId,
@@ -221,9 +233,15 @@ export async function uploadContractToStorage(
   try {
     console.log(`Uploading contract HTML to storage for user: ${userId}, contract: ${contractId}`);
     
-    // Check if the contracts bucket exists and create it if needed
+    // Ensure the contracts bucket exists
     try {
-      const { data: buckets } = await supabase.storage.listBuckets();
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      
+      if (bucketsError) {
+        console.error('Error listing buckets:', bucketsError);
+        return { success: false, error: bucketsError };
+      }
+      
       const contractsBucketExists = buckets?.some(bucket => bucket.name === 'contracts');
       
       if (!contractsBucketExists) {
@@ -241,7 +259,7 @@ export async function uploadContractToStorage(
         console.log('Created contracts bucket successfully');
       }
     } catch (bucketCheckError) {
-      console.error('Error checking for contracts bucket:', bucketCheckError);
+      console.error('Error checking/creating contracts bucket:', bucketCheckError);
       // Continue anyway, we'll try the upload
     }
     
