@@ -29,6 +29,16 @@ export const handleExistingUserPayment = async (
   }
   
   try {
+    // Convert TokenData to a plain object for JSON storage
+    const paymentMethodData = {
+      token: tokenData.token,
+      lastFourDigits: tokenData.lastFourDigits,
+      expiryMonth: tokenData.expiryMonth,
+      expiryYear: tokenData.expiryYear,
+      cardholderName: tokenData.cardholderName,
+      cardType: tokenData.cardType || 'unknown'
+    };
+
     const { error: subscriptionError } = await supabase
       .from('subscriptions')
       .upsert({
@@ -37,7 +47,7 @@ export const handleExistingUserPayment = async (
         status: planId === 'monthly' ? 'trial' : 'active',
         trial_ends_at: trialEndsAt?.toISOString() || null,
         current_period_ends_at: periodEndsAt?.toISOString() || null,
-        payment_method: tokenData,
+        payment_method: paymentMethodData,
         contract_signed: true,
         contract_signed_at: now.toISOString()
       });
@@ -58,7 +68,7 @@ export const handleExistingUserPayment = async (
           currency: 'USD',
           status: 'completed',
           payment_method: {
-            ...tokenData,
+            ...paymentMethodData,
             simulated: false 
           },
           token: tokenData.token?.toString() || `payment_${Date.now()}`
@@ -125,7 +135,7 @@ export const handleExistingUserPayment = async (
           amount: 0,
           currency: 'USD',
           status: 'trial_started',
-          payment_method: tokenData,
+          payment_method: paymentMethodData,
           token: `trial_${userId}`
         });
     }

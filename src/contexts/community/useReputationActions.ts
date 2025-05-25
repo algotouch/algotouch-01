@@ -1,162 +1,76 @@
 
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { ACTIVITY_TYPES, getUserReputation, awardPoints } from '@/lib/community';
 
-export function useReputationActions(userId: string | undefined) {
-  const [userPoints, setUserPoints] = useState(0);
-  const [userLevel, setUserLevel] = useState(1);
+export const useReputationActions = () => {
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Function to check and award daily login points
-  const checkAndAwardDailyLogin = async () => {
-    if (!userId) return;
-    
+  const incrementUserPoints = async (userId: string, points: number, activityType: string) => {
+    setIsLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // Check if user already got points today
-      const { data } = await supabase
-        .from('community_activities')
-        .select('created_at')
+      // Check if user has reputation record
+      const { data: existingRep, error: repError } = await supabase
+        .from('community_reputation')
+        .select('*')
         .eq('user_id', userId)
-        .eq('activity_type', ACTIVITY_TYPES.DAILY_LOGIN)
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`)
         .maybeSingle();
-      
-      if (!data) {
-        // Award points for daily login
-        const success = await awardPoints(userId, ACTIVITY_TYPES.DAILY_LOGIN);
-        if (success) {
-          toast.success('קיבלת 2 נקודות על כניסה יומית!', {
-            duration: 3000,
+
+      if (repError && repError.code !== 'PGRST116') {
+        throw repError;
+      }
+
+      if (existingRep) {
+        // Update existing reputation
+        const newPoints = existingRep.points + points;
+        const newLevel = Math.floor(newPoints / 100) + 1; // Simple level calculation
+
+        const { error: updateError } = await supabase
+          .from('community_reputation')
+          .update({
+            points: newPoints,
+            level: newLevel,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new reputation record
+        const { error: insertError } = await supabase
+          .from('community_reputation')
+          .insert({
+            user_id: userId,
+            points: points,
+            level: 1
           });
-          
-          // Check for streak milestones and award bonus points
-          await checkStreakMilestones(userId);
-          
-          // Update user points after awarding
-          const reputation = await getUserReputation(userId);
-          if (reputation) {
-            setUserPoints(reputation.points);
-            setUserLevel(reputation.level);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error checking daily login:', error);
-    }
-  };
 
-  // Check for streak milestones and award bonus points
-  const checkStreakMilestones = async (userId: string) => {
-    try {
-      // Get current streak data
-      const { data: streakData } = await supabase
-        .from('user_streaks')
-        .select('current_streak')
-        .eq('user_id', userId)
-        .single();
-      
-      if (!streakData) return;
-      
-      const { current_streak } = streakData;
-      
-      // Milestone bonus points
-      if (current_streak === 3) {
-        // 3-day streak milestone
-        await awardBonusPoints(userId, 5, '3 ימים רצופים');
-      } else if (current_streak === 7) {
-        // 7-day streak milestone
-        await awardBonusPoints(userId, 15, 'שבוע מלא');
-      } else if (current_streak === 14) {
-        // 14-day streak milestone
-        await awardBonusPoints(userId, 30, 'שבועיים רצופים');
-      } else if (current_streak === 30) {
-        // 30-day streak milestone
-        await awardBonusPoints(userId, 100, 'חודש מלא');
-      } else if (current_streak % 30 === 0 && current_streak > 30) {
-        // Every additional 30 days
-        await awardBonusPoints(userId, 100, `${current_streak} ימים רצופים`);
+        if (insertError) throw insertError;
       }
-    } catch (error) {
-      console.error('Error checking streak milestones:', error);
-    }
-  };
 
-  // Award bonus points for streaks
-  const awardBonusPoints = async (userId: string, points: number, milestone: string) => {
-    try {
-      // Create a custom activity type for the record
-      const { data, error } = await supabase
+      // Log the activity
+      const { error: activityError } = await supabase
         .from('community_activities')
         .insert({
           user_id: userId,
-          activity_type: 'STREAK_MILESTONE',
-          points_earned: points,
-          metadata: { milestone }
+          activity_type: activityType,
+          points_earned: points
         });
-      
-      if (error) {
-        console.error('Error recording streak milestone:', error);
-        return;
-      }
-      
-      // Update user's points directly
-      try {
-        const { error } = await supabase.rpc('increment_user_points', {
-          user_id_param: userId,
-          points_to_add: points
-        });
-        
-        if (error) throw error;
-      } catch (rpcError) {
-        console.warn('RPC failed, using fallback method:', rpcError);
-        
-        // Fallback method
-        const { data: currentRep } = await supabase
-          .from('community_reputation')
-          .select('points')
-          .eq('user_id', userId)
-          .single();
-          
-        if (currentRep) {
-          await supabase
-            .from('community_reputation')
-            .update({ 
-              points: currentRep.points + points, 
-              updated_at: new Date().toISOString() 
-            })
-            .eq('user_id', userId);
-        }
-      }
-      
-      // Show toast notification
-      toast.success(`ציון דרך חדש: ${milestone}! קיבלת ${points} נקודות בונוס!`, {
-        duration: 5000,
-      });
-    } catch (error) {
-      console.error('Error awarding bonus points:', error);
-    }
-  };
 
-  const updateReputationData = async () => {
-    if (!userId) return;
-    
-    const reputation = await getUserReputation(userId);
-    if (reputation) {
-      setUserPoints(reputation.points);
-      setUserLevel(reputation.level);
+      if (activityError) {
+        console.error('Error logging activity:', activityError);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error incrementing user points:', error);
+      return { success: false, error };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return {
-    userPoints,
-    userLevel,
-    setUserPoints,
-    setUserLevel,
-    checkAndAwardDailyLogin,
-    updateReputationData
+    incrementUserPoints,
+    isLoading
   };
-}
+};

@@ -5,6 +5,9 @@ export interface TokenData {
   expiryMonth: string;
   expiryYear: string;
   cardholderName: string;
+  cardType?: string;
+  approvalNumber?: string | number;
+  [key: string]: string | number | boolean | null | undefined; // Index signature for Json compatibility
 }
 
 export interface PaymentError extends Error {
@@ -47,4 +50,79 @@ export interface PaymentToken {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  trialDays: number;
+  billingCycle: 'monthly' | 'annual' | 'one-time';
+  currency?: string;
+}
+
+export interface RegistrationData {
+  email: string;
+  password?: string;
+  planId: string;
+  userData?: {
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    fullName?: string;
+    email?: string;
+    idNumber?: string;
+  };
+  contractSigned?: boolean;
+  contractSignedAt?: string;
+  contractDetails?: ContractSignatureData;
+  registrationTime?: string;
+  paymentToken?: {
+    token?: string;
+    expiry?: string;
+    last4Digits?: string;
+    cardholderName?: string;
+  };
+}
+
+export interface ContractSignatureData {
+  contractHtml?: string;
+  signature?: string;
+  agreedToTerms?: boolean;
+  agreedToPrivacy?: boolean;
+  contractVersion?: string;
+  browserInfo?: {
+    userAgent?: string;
+    language?: string;
+    platform?: string;
+    timeZone?: string;
+  };
+}
+
+export interface CardcomPayload {
+  ResponseCode: number;
+  Description: string;
+  LowProfileId: string;
+  TranzactionId?: number;
+  ReturnValue?: string;
+  [key: string]: any;
+}
+
+export interface CardcomVerifyResponse {
+  success: boolean;
+  message?: string;
+  error?: any;
+  registrationId?: string;
+  [key: string]: any;
+}
+
+export interface CardcomWebhookPayload {
+  ResponseCode: number;
+  Description: string;
+  LowProfileId: string;
+  TranzactionId?: number;
+  ReturnValue?: string;
+  [key: string]: any;
 }
