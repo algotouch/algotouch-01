@@ -12,9 +12,10 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface SignupFormProps {
   onSignupSuccess?: () => void;
+  onSwitchToLogin?: () => void;
 }
 
-const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
+const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogin }) => {
   const navigate = useNavigate();
   const { updateRegistrationData, startRegistering, clearRegistrationData } = useUnifiedRegistrationData();
   
@@ -63,68 +64,56 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const checkIfUserExists = async (email: string): Promise<boolean> => {
+  const checkIfUserExists = async (email: string, password: string): Promise<boolean> => {
     try {
       console.log('SignupForm: Checking if user exists for email:', email);
       
-      // Try to sign in with the email and a dummy password
-      // If user exists, we'll get a specific error about invalid credentials
-      // If user doesn't exist, we'll get a different error
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // Try to sign up with temporary password to see if user exists
+      const { data, error } = await supabase.auth.signUp({
         email,
-        password: 'dummy_password_that_should_fail_123!'
+        password: 'temp_password_for_check_123!',
+        options: {
+          data: {
+            first_name: 'temp',
+            last_name: 'temp'
+          }
+        }
       });
       
-      console.log('SignupForm: Sign-in attempt result:', { data, error });
+      console.log('SignupForm: Signup attempt result:', { data, error });
       
       if (error) {
-        // Parse the error message to determine if user exists
         const errorMessage = error.message.toLowerCase();
-        
-        // These error messages indicate the user exists but password is wrong
-        const userExistsErrors = [
-          'invalid login credentials',
-          'invalid password',
-          'wrong password',
-          'incorrect password',
-          'authentication failed',
-          'invalid email or password',
-          'invalid credentials'
-        ];
-        
-        // These error messages indicate the user doesn't exist
-        const userNotExistsErrors = [
-          'user not found',
-          'email not confirmed',
-          'no user found',
-          'user does not exist'
-        ];
-        
         console.log('SignupForm: Error message analysis:', errorMessage);
         
-        // Check if it's a "user exists" error
+        // These error messages indicate the user already exists
+        const userExistsErrors = [
+          'user already registered',
+          'email address already in use',
+          'email already taken',
+          'user with this email already exists',
+          'duplicate',
+          'already exists'
+        ];
+        
+        // Check if it's a "user already exists" error
         if (userExistsErrors.some(err => errorMessage.includes(err))) {
-          console.log('SignupForm: User exists - detected from error message');
+          console.log('SignupForm: User already exists - detected from signup error');
           return true;
         }
         
-        // Check if it's a "user doesn't exist" error  
-        if (userNotExistsErrors.some(err => errorMessage.includes(err))) {
-          console.log('SignupForm: User does not exist - detected from error message');
-          return false;
-        }
-        
-        // For any other error, assume user doesn't exist to be safe
-        console.log('SignupForm: Unknown error type, assuming user does not exist');
+        // For other errors, assume user doesn't exist to allow retry
+        console.log('SignupForm: Other error, assuming user does not exist:', errorMessage);
         return false;
       }
       
-      // If no error (successful login), user definitely exists
+      // If signup was successful but we got a user back, it means the user was created
+      // In this case, we should delete the temporary user and return false (user didn't exist before)
       if (data.user) {
-        console.log('SignupForm: User exists - successful login detected');
-        // Sign them out immediately since this was just a check
-        await supabase.auth.signOut();
-        return true;
+        console.log('SignupForm: Temporary user created, user did not exist before');
+        // Don't sign out the temporary user as it will mess with auth state
+        // Just return false since the user didn't exist before our check
+        return false;
       }
       
       // Default case - assume user doesn't exist
@@ -151,7 +140,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       console.log('SignupForm: Starting registration process for:', email);
       
       // First check if user already exists
-      const userExists = await checkIfUserExists(email);
+      const userExists = await checkIfUserExists(email, password);
       console.log('SignupForm: User exists check result:', userExists);
       
       if (userExists) {
@@ -214,10 +203,14 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
   };
 
   const handleLoginRedirect = () => {
-    // Switch to login tab
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('tab', 'login');
-    navigate(currentUrl.pathname + currentUrl.search, { replace: true });
+    if (onSwitchToLogin) {
+      onSwitchToLogin();
+    } else {
+      // Fallback to URL navigation if callback not provided
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('tab', 'login');
+      navigate(currentUrl.pathname + currentUrl.search, { replace: true });
+    }
   };
 
   return (

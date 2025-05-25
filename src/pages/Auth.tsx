@@ -37,6 +37,8 @@ const Auth = () => {
       const tab = params.get('tab');
       if (tab === 'signup') {
         setActiveTab('signup');
+      } else if (tab === 'login') {
+        setActiveTab('login');
       }
     } catch (error) {
       console.error("Error parsing URL params:", error);
@@ -78,6 +80,25 @@ const Auth = () => {
       }
     }
   }, [registrationData, clearRegistrationData]);
+
+  // Function to switch tabs
+  const handleSwitchToLogin = () => {
+    console.log('Auth: Switching to login tab');
+    setActiveTab('login');
+    // Update URL as well
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('tab', 'login');
+    navigate(currentUrl.pathname + currentUrl.search, { replace: true });
+  };
+
+  const handleSwitchToSignup = () => {
+    console.log('Auth: Switching to signup tab');
+    setActiveTab('signup');
+    // Update URL as well
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('tab', 'signup');
+    navigate(currentUrl.pathname + currentUrl.search, { replace: true });
+  };
 
   // Show loading state while auth is initializing
   if (!initialized || loading) {
@@ -139,7 +160,7 @@ const Auth = () => {
             </TabsContent>
             
             <TabsContent value="signup">
-              <SignupForm />
+              <SignupForm onSwitchToLogin={handleSwitchToLogin} />
             </TabsContent>
           </Tabs>
         </div>
