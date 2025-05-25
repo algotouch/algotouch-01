@@ -56,3 +56,6 @@ export const createTokenData = (cardNumber: string, expiryDate: string, cardhold
     cardholderName
   };
 };
+
+// Re-export TokenData for convenience
+export type { TokenData };
