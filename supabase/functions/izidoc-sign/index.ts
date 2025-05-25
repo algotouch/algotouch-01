@@ -20,72 +20,6 @@ interface ContractSignRequest {
   browserInfo?: any;
 }
 
-// Function to enhance contract HTML with signature details
-function enhanceContractWithSignatureDetails(
-  originalHtml: string,
-  fullName: string,
-  email: string,
-  planId: string,
-  signature: string,
-  signedAt: string,
-  contractId: string,
-  browserInfo: any
-): string {
-  console.log('izidoc-sign: Enhancing contract HTML with signature details');
-  
-  // Create signature section HTML
-  const signatureSection = `
-    <div style="margin-top: 40px; padding: 20px; border-top: 2px solid #333; page-break-inside: avoid;">
-      <h3 style="text-align: center; margin-bottom: 30px; color: #333; font-family: Arial, sans-serif;">פרטי החתימה</h3>
-      
-      <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-family: Arial, sans-serif;">
-        <div style="flex: 1; margin-left: 20px;">
-          <h4 style="color: #666; margin-bottom: 10px;">פרטי החותם:</h4>
-          <p style="margin: 5px 0;"><strong>שם מלא:</strong> ${fullName}</p>
-          <p style="margin: 5px 0;"><strong>אימייל:</strong> ${email}</p>
-          <p style="margin: 5px 0;"><strong>תכנית:</strong> ${planId}</p>
-        </div>
-        
-        <div style="flex: 1;">
-          <h4 style="color: #666; margin-bottom: 10px;">פרטי החתימה:</h4>
-          <p style="margin: 5px 0;"><strong>תאריך חתימה:</strong> ${new Date(signedAt).toLocaleString('he-IL')}</p>
-          <p style="margin: 5px 0;"><strong>מזהה חוזה:</strong> ${contractId}</p>
-          <p style="margin: 5px 0;"><strong>גרסת חוזה:</strong> 1.0</p>
-        </div>
-      </div>
-      
-      <div style="margin-bottom: 30px;">
-        <h4 style="color: #666; margin-bottom: 15px; font-family: Arial, sans-serif;">חתימה דיגיטלית:</h4>
-        <div style="border: 1px solid #ddd; padding: 15px; background-color: #f9f9f9; text-align: center; min-height: 120px; display: flex; align-items: center; justify-content: center;">
-          <img src="${signature}" alt="חתימה דיגיטלית" style="max-height: 100px; max-width: 300px;" />
-        </div>
-        <p style="text-align: center; font-size: 12px; color: #666; margin-top: 10px;">
-          חתימה דיגיטלית מאומתת - ${new Date(signedAt).toLocaleString('he-IL')}
-        </p>
-      </div>
-      
-      <div style="margin-top: 30px; font-size: 11px; color: #888; font-family: Arial, sans-serif;">
-        <h5 style="color: #666; margin-bottom: 10px;">מידע טכני:</h5>
-        <p style="margin: 3px 0;">כתובת IP: ${browserInfo?.ipAddress || 'לא זמין'}</p>
-        <p style="margin: 3px 0;">דפדפן: ${browserInfo?.userAgent || 'לא זמין'}</p>
-        <p style="margin: 3px 0;">שפה: ${browserInfo?.language || 'he-IL'}</p>
-        <p style="margin: 3px 0;">אזור זמן: ${browserInfo?.timeZone || 'Asia/Jerusalem'}</p>
-        <p style="margin: 3px 0;">גודל מסך: ${browserInfo?.screenSize || 'לא זמין'}</p>
-      </div>
-      
-      <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #aaa;">
-        חוזה זה נחתם באופן דיגיטלי ומאומת על ידי המערכת
-      </div>
-    </div>
-  `;
-  
-  // Insert the signature section before the closing body tag
-  const enhancedHtml = originalHtml.replace('</body>', `${signatureSection}</body>`);
-  
-  console.log('izidoc-sign: Contract HTML enhanced successfully');
-  return enhancedHtml;
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -159,29 +93,16 @@ serve(async (req) => {
 
     // Generate a unique contract ID
     const contractId = crypto.randomUUID();
-    const signedAt = new Date().toISOString();
     console.log('izidoc-sign: Generated contract ID:', contractId);
 
-    // Enhance contract HTML with signature details
-    const enhancedContractHtml = enhanceContractWithSignatureDetails(
-      contractHtml,
-      fullName,
-      email,
-      planId,
-      signature,
-      signedAt,
-      contractId,
-      browserInfo
-    );
-
-    // Try to upload enhanced HTML to storage
+    // Try to upload HTML to storage first (optional step)
     let pdfUrl = null;
     try {
       const fileName = `contracts/${contractId}.html`;
       const encoder = new TextEncoder();
-      const bytes = encoder.encode(enhancedContractHtml);
+      const bytes = encoder.encode(contractHtml);
       
-      console.log('izidoc-sign: Uploading enhanced contract to storage:', fileName);
+      console.log('izidoc-sign: Uploading contract to storage:', fileName);
       
       const { data: uploadData, error: uploadError } = await supabase
         .storage
@@ -194,7 +115,7 @@ serve(async (req) => {
       if (uploadError) {
         console.warn('izidoc-sign: Storage upload failed, continuing without URL:', uploadError);
       } else {
-        console.log('izidoc-sign: Enhanced contract uploaded to storage:', uploadData?.path);
+        console.log('izidoc-sign: Contract uploaded to storage:', uploadData?.path);
         
         // Create a signed URL
         const { data: urlData } = await supabase
@@ -209,24 +130,23 @@ serve(async (req) => {
       console.warn('izidoc-sign: Storage operation failed, continuing without URL:', storageError);
     }
 
-    // Store contract signature in database
+    // Store contract signature in database - now without foreign key dependency
     console.log('izidoc-sign: Saving contract to database...');
     
     const { data, error } = await supabase
       .from('contract_signatures')
       .insert({
         id: contractId,
-        user_id: userId || null,
+        user_id: userId || null, // Now nullable, so we can handle cases where user doesn't exist yet
         plan_id: planId,
         full_name: fullName,
         email: email,
         signature: signature,
-        contract_html: enhancedContractHtml, // Save the enhanced HTML
+        contract_html: contractHtml,
         agreed_to_terms: agreedToTerms,
         agreed_to_privacy: agreedToPrivacy,
         contract_version: contractVersion,
         pdf_url: pdfUrl,
-        contract_signed_at: signedAt,
         browser_info: browserInfo || {
           userAgent: req.headers.get('user-agent') || 'unknown',
           language: 'he-IL',
@@ -252,53 +172,16 @@ serve(async (req) => {
     }
 
     console.log('izidoc-sign: Contract signature saved successfully:', data);
-
-    // Update user metadata in auth.users table with contract details
-    if (userId) {
-      try {
-        console.log('izidoc-sign: Updating user metadata with contract details');
-        
-        const contractMetadata = {
-          contract_signed: true,
-          contract_id: contractId,
-          contract_signed_at: signedAt,
-          plan_id: planId,
-          full_name: fullName,
-          contract_version: contractVersion,
-          contract_url: pdfUrl
-        };
-
-        const { error: metadataError } = await supabase.auth.admin.updateUserById(
-          userId,
-          {
-            user_metadata: contractMetadata
-          }
-        );
-
-        if (metadataError) {
-          console.warn('izidoc-sign: Failed to update user metadata:', metadataError);
-        } else {
-          console.log('izidoc-sign: User metadata updated successfully with contract details');
-        }
-      } catch (metadataError) {
-        console.warn('izidoc-sign: Exception updating user metadata:', metadataError);
-      }
-    }
-
     console.log('izidoc-sign: Contract processing completed successfully');
 
-    // Return success with enhanced contract details
+    // Return success immediately - don't wait for emails
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           contractId: contractId,
           documentId: contractId,
-          signedAt: signedAt,
-          enhancedContractUrl: pdfUrl,
-          fullName: fullName,
-          email: email,
-          planId: planId
+          signedAt: data.created_at
         }
       }),
       {
