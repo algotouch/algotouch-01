@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import SubscriptionSteps from '@/components/subscription/SubscriptionSteps';
 import { useSubscriptionFlow } from './hooks/useSubscriptionFlow';
@@ -26,6 +26,10 @@ const SubscriptionContent = () => {
     contractId
   } = useSubscriptionFlow();
 
+  // State to handle redirects
+  const [shouldRedirectToAuth, setShouldRedirectToAuth] = useState(false);
+  const [shouldRedirectToMySubscription, setShouldRedirectToMySubscription] = useState(false);
+
   const isLoading = regDataLoading || flowLoading || isCheckingSubscription;
 
   // Clear registration data if the user already has an active subscription
@@ -38,8 +42,7 @@ const SubscriptionContent = () => {
     }
   }, [hasActiveSubscription, registrationData, clearRegistrationData]);
 
-  // If user is authenticated but has registration data, it means they completed signup
-  // Clear the registration data and show a message
+  // Handle authenticated user with registration data
   useEffect(() => {
     if (isAuthenticated && registrationData && !hasActiveSubscription) {
       console.log('SubscriptionContent: Authenticated user with registration data but no active subscription');
@@ -52,30 +55,25 @@ const SubscriptionContent = () => {
     }
   }, [isAuthenticated, registrationData, hasActiveSubscription, clearRegistrationData]);
 
-  // Show loading state while data is being loaded
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <Spinner size="lg" />
-          <p className="text-muted-foreground">טוען נתוני מנוי...</p>
-        </div>
-      </div>
-    );
-  }
+  // Handle redirects based on authentication and subscription status
+  useEffect(() => {
+    if (!isLoading) {
+      // If user has active subscription, redirect to my-subscription page
+      if (isAuthenticated && hasActiveSubscription) {
+        console.log('SubscriptionContent: User has active subscription, redirecting to my-subscription page');
+        setShouldRedirectToMySubscription(true);
+        return;
+      }
 
-  // If user has active subscription, redirect to my-subscription page
-  if (isAuthenticated && hasActiveSubscription) {
-    console.log('SubscriptionContent: User has active subscription, redirecting to my-subscription page');
-    return <Navigate to="/my-subscription" replace />;
-  }
-
-  // If no registration data and user is not authenticated, redirect to signup
-  if (!registrationData && !isAuthenticated) {
-    console.log('SubscriptionContent: No registration data and not authenticated, redirecting to auth page');
-    toast.error('נתוני הרשמה חסרים, אנא התחל תהליך הרשמה מחדש');
-    return <Navigate to="/auth?tab=signup" replace />;
-  }
+      // If no registration data and user is not authenticated, redirect to signup
+      if (!registrationData && !isAuthenticated) {
+        console.log('SubscriptionContent: No registration data and not authenticated, redirecting to auth page');
+        toast.error('נתוני הרשמה חסרים, אנא התחל תהליך הרשמה מחדש');
+        setShouldRedirectToAuth(true);
+        return;
+      }
+    }
+  }, [isLoading, isAuthenticated, hasActiveSubscription, registrationData]);
 
   // Additional validation every time the step changes
   useEffect(() => {
@@ -99,6 +97,27 @@ const SubscriptionContent = () => {
     }
     
   }, [currentStep, selectedPlan, contractId, isAuthenticated, hasActiveSubscription, handleBackToStep]);
+
+  // Handle redirects after all hooks have been called
+  if (shouldRedirectToMySubscription) {
+    return <Navigate to="/my-subscription" replace />;
+  }
+
+  if (shouldRedirectToAuth) {
+    return <Navigate to="/auth?tab=signup" replace />;
+  }
+
+  // Show loading state while data is being loaded
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">טוען נתוני מנוי...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4" dir="rtl">
