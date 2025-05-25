@@ -39,42 +39,57 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
   };
 
   const navigateToSubscription = async () => {
-    console.log('SignupForm: Starting navigation process');
+    console.log('SignupForm: Starting enhanced navigation process');
     
-    // Wait a bit for context to update
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for context and sessionStorage to be fully updated
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Try navigation with retry mechanism
-    const maxRetries = 3;
+    // Verify data is in sessionStorage
+    const storedData = sessionStorage.getItem('registration_data');
+    if (!storedData) {
+      console.error('SignupForm: No data found in sessionStorage before navigation');
+      return false;
+    }
+    
+    console.log('SignupForm: Data confirmed in sessionStorage, proceeding with navigation');
+    
+    // Force a page refresh approach by setting a flag and navigating
+    sessionStorage.setItem('force_subscription_access', 'true');
+    
+    // Try navigation with enhanced retry mechanism
+    const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`SignupForm: Navigation attempt ${attempt}/${maxRetries}`);
+      console.log(`SignupForm: Enhanced navigation attempt ${attempt}/${maxRetries}`);
       
       try {
+        // Use replace to avoid back button issues
         navigate('/subscription', { replace: true });
-        console.log('SignupForm: Navigation completed');
+        console.log('SignupForm: Navigation call completed');
         
-        // Wait to see if navigation succeeded
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Wait longer to see if navigation succeeded
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // Check if we're on the subscription page
         if (window.location.pathname === '/subscription') {
           console.log('SignupForm: Successfully navigated to subscription page');
+          sessionStorage.removeItem('force_subscription_access');
           return true;
         } else {
           console.log('SignupForm: Navigation failed, current path:', window.location.pathname);
           if (attempt < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
           }
         }
       } catch (error) {
         console.error(`SignupForm: Navigation attempt ${attempt} failed:`, error);
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
       }
     }
     
-    console.error('SignupForm: All navigation attempts failed');
+    console.error('SignupForm: All enhanced navigation attempts failed');
+    sessionStorage.removeItem('force_subscription_access');
     return false;
   };
 
@@ -108,15 +123,18 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
       );
       
       if (result.success) {
-        console.log('SignupForm: Registration successful, starting navigation');
-        
-        // Ensure context is updated before navigation
-        await new Promise(resolve => setTimeout(resolve, 200));
+        console.log('SignupForm: Registration successful, starting enhanced navigation');
         
         const navigationSuccess = await navigateToSubscription();
         
         if (navigationSuccess && onSignupSuccess) {
           onSignupSuccess();
+        } else if (!navigationSuccess) {
+          console.error('SignupForm: Navigation failed, but registration was successful');
+          // Still consider this a success as the data is saved
+          if (onSignupSuccess) {
+            onSignupSuccess();
+          }
         }
       } else if (result.userExists) {
         console.log('SignupForm: User already exists');
@@ -169,7 +187,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={signingUp}>
-            {signingUp ? 'בודק נתונים...' : 'המשך לבחירת תכנית'}
+            {signingUp ? 'שומר נתונים...' : 'המשך לבחירת תכנית'}
           </Button>
         </CardFooter>
       </form>

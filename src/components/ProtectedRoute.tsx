@@ -25,29 +25,65 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   
   const location = useLocation();
   const [allowSubscriptionAccess, setAllowSubscriptionAccess] = useState(false);
+  const [hasCheckedSessionStorage, setHasCheckedSessionStorage] = useState(false);
+  const [sessionRegistrationData, setSessionRegistrationData] = useState(null);
   
   console.log('ProtectedRoute: Current state', {
     path: location.pathname,
     isAuthenticated,
     hasRegistrationData: !!registrationData,
+    hasSessionData: !!sessionRegistrationData,
     pendingSubscription,
     loading,
     initialized,
-    allowSubscriptionAccess
+    allowSubscriptionAccess,
+    hasCheckedSessionStorage
   });
+  
+  // Check sessionStorage for registration data as backup
+  useEffect(() => {
+    if (!hasCheckedSessionStorage) {
+      try {
+        const storedData = sessionStorage.getItem('registration_data');
+        const forceAccess = sessionStorage.getItem('force_subscription_access');
+        
+        if (storedData) {
+          const parsedData = JSON.parse(storedData);
+          console.log('ProtectedRoute: Found data in sessionStorage:', {
+            email: parsedData.email,
+            hasUserData: !!parsedData.userData,
+            timestamp: parsedData.registrationTime
+          });
+          setSessionRegistrationData(parsedData);
+        }
+        
+        if (forceAccess === 'true') {
+          console.log('ProtectedRoute: Force access flag detected');
+          setAllowSubscriptionAccess(true);
+        }
+        
+        setHasCheckedSessionStorage(true);
+      } catch (error) {
+        console.error('ProtectedRoute: Error checking sessionStorage:', error);
+        setHasCheckedSessionStorage(true);
+      }
+    }
+  }, [hasCheckedSessionStorage]);
   
   // Check for subscription access on registration data changes
   useEffect(() => {
-    if (registrationData && pendingSubscription) {
+    const hasAnyRegistrationData = registrationData || sessionRegistrationData;
+    
+    if (hasAnyRegistrationData && (pendingSubscription || sessionRegistrationData)) {
       console.log('ProtectedRoute: Granting subscription access due to registration data');
       setAllowSubscriptionAccess(true);
-    } else if (!registrationData && !isAuthenticated) {
+    } else if (!hasAnyRegistrationData && !isAuthenticated) {
       setAllowSubscriptionAccess(false);
     }
-  }, [registrationData, pendingSubscription, isAuthenticated]);
+  }, [registrationData, sessionRegistrationData, pendingSubscription, isAuthenticated]);
   
-  // Show loading while auth is initializing
-  if (!initialized || loading) {
+  // Show loading while auth is initializing or while checking sessionStorage
+  if (!initialized || loading || !hasCheckedSessionStorage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-background/90">
         <div className="text-center space-y-4">
@@ -68,17 +104,23 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <>{children}</>;
   }
 
-  // Special handling for subscription page
+  // Special handling for subscription page with enhanced logic
   if (location.pathname === '/subscription' || location.pathname.startsWith('/subscription/')) {
     console.log('ProtectedRoute: Subscription page access check', {
       isAuthenticated,
       hasRegistrationData: !!registrationData,
+      hasSessionData: !!sessionRegistrationData,
       pendingSubscription,
       allowSubscriptionAccess
     });
     
     // Allow access if user is authenticated OR has valid registration data OR explicit access granted
-    if (isAuthenticated || allowSubscriptionAccess || (registrationData && pendingSubscription)) {
+    const hasValidAccess = isAuthenticated || 
+                          allowSubscriptionAccess || 
+                          (registrationData && pendingSubscription) ||
+                          sessionRegistrationData;
+    
+    if (hasValidAccess) {
       console.log('ProtectedRoute: Allowing access to subscription page');
       return <>{children}</>;
     }

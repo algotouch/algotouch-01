@@ -24,43 +24,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedData) {
         const data = JSON.parse(storedData);
         
-        // Check if data is still valid (within 30 minutes)
+        console.log('AuthProvider: Found stored registration data:', {
+          email: data.email,
+          hasUserData: !!data.userData,
+          timestamp: data.registrationTime
+        });
+        
+        // Check if data is still valid (within 2 hours - extended time)
         const registrationTime = data.registrationTime ? new Date(data.registrationTime) : null;
         const now = new Date();
         const isValid = registrationTime && 
-          ((now.getTime() - registrationTime.getTime()) < 30 * 60 * 1000);
+          ((now.getTime() - registrationTime.getTime()) < 2 * 60 * 60 * 1000); // 2 hours
         
         if (isValid) {
+          console.log('AuthProvider: Registration data is valid, setting state');
           setRegistrationData({ ...data, isValid });
           setIsRegistering(true);
           setPendingSubscription(true);
         } else {
+          console.log('AuthProvider: Registration data expired, clearing');
           // Clear stale registration data
           sessionStorage.removeItem('registration_data');
         }
       }
     } catch (error) {
-      console.error("Error parsing registration data:", error);
+      console.error("AuthProvider: Error parsing registration data:", error);
       sessionStorage.removeItem('registration_data');
     }
   }, []);
   
   // Update registration data in session storage when state changes
   const updateRegistrationData = (data: Partial<AuthRegistrationData>) => {
+    console.log('AuthProvider: Updating registration data:', {
+      email: data.email,
+      hasUserData: !!data.userData
+    });
+    
     const updatedData = {
       ...(registrationData || {}),
       ...data,
       registrationTime: data.registrationTime || new Date().toISOString()
     };
     
+    // Update state first
     setRegistrationData(updatedData as AuthRegistrationData);
-    sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
     setIsRegistering(true);
+    setPendingSubscription(true);
+    
+    // Then update sessionStorage
+    sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
+    
+    console.log('AuthProvider: Registration data updated successfully');
   };
   
   // Clear registration data
   const clearRegistrationData = () => {
+    console.log('AuthProvider: Clearing registration data');
     sessionStorage.removeItem('registration_data');
+    sessionStorage.removeItem('force_subscription_access');
     localStorage.removeItem('temp_registration_id');
     setRegistrationData(null);
     setIsRegistering(false);

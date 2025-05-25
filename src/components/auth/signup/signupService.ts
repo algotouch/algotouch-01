@@ -54,12 +54,26 @@ export const handleSignupProcess = async (
       registrationTime: new Date().toISOString()
     };
     
-    // Store in session storage
-    sessionStorage.setItem('registration_data', JSON.stringify(registrationData));
+    console.log('SignupService: Saving registration data:', {
+      email: registrationData.email,
+      hasUserData: !!registrationData.userData,
+      timestamp: registrationData.registrationTime
+    });
     
-    // Update unified registration data and start the flow
+    // Store in session storage FIRST
+    sessionStorage.setItem('registration_data', JSON.stringify(registrationData));
+    console.log('SignupService: Data saved to sessionStorage');
+    
+    // Update context
     updateRegistrationData(registrationData);
+    console.log('SignupService: Context updated');
+    
+    // Mark as registering and pending subscription
     startRegistering();
+    console.log('SignupService: Registration started');
+    
+    // Wait a bit for all state updates to complete
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     console.log('SignupService: Registration data saved successfully');
     toast.success('הפרטים נשמרו בהצלחה - אנא בחר תכנית מנוי');
