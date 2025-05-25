@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { RegistrationData } from '@/types/payment';
 
@@ -24,7 +23,7 @@ export const useUnifiedRegistrationData = () => {
           }
           
           // Set current step based on data completeness
-          if (data.contractDetails?.contractSigned) {
+          if (data.contractSigned) {
             setCurrentStep('payment');
           } else if (data.planId) {
             setCurrentStep('contract');
@@ -63,7 +62,7 @@ export const useUnifiedRegistrationData = () => {
     }
     
     // Update step based on new data
-    if (newData.contractDetails?.contractSigned) {
+    if (newData.contractSigned) {
       setCurrentStep('payment');
     }
   };
