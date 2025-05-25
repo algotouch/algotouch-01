@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,30 +65,75 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
 
   const checkIfUserExists = async (email: string): Promise<boolean> => {
     try {
-      // Try to sign up with the email to see if user already exists
-      const { data, error } = await supabase.auth.signUp({
+      console.log('SignupForm: Checking if user exists for email:', email);
+      
+      // Try to sign in with the email and a dummy password
+      // If user exists, we'll get a specific error about invalid credentials
+      // If user doesn't exist, we'll get a different error
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password: 'dummy_password_for_check'
+        password: 'dummy_password_that_should_fail_123!'
       });
       
-      // If we get a user_repeated_signup error or similar, user exists
+      console.log('SignupForm: Sign-in attempt result:', { data, error });
+      
       if (error) {
-        if (error.message.includes('User already registered') || 
-            error.message.includes('already exists') ||
-            error.message.includes('user_repeated_signup') ||
-            error.message.includes('already been registered')) {
+        // Parse the error message to determine if user exists
+        const errorMessage = error.message.toLowerCase();
+        
+        // These error messages indicate the user exists but password is wrong
+        const userExistsErrors = [
+          'invalid login credentials',
+          'invalid password',
+          'wrong password',
+          'incorrect password',
+          'authentication failed',
+          'invalid email or password',
+          'invalid credentials'
+        ];
+        
+        // These error messages indicate the user doesn't exist
+        const userNotExistsErrors = [
+          'user not found',
+          'email not confirmed',
+          'no user found',
+          'user does not exist'
+        ];
+        
+        console.log('SignupForm: Error message analysis:', errorMessage);
+        
+        // Check if it's a "user exists" error
+        if (userExistsErrors.some(err => errorMessage.includes(err))) {
+          console.log('SignupForm: User exists - detected from error message');
           return true;
         }
-        // For other errors, we can't determine, so assume user doesn't exist
-        console.log('Unexpected error during user check:', error);
+        
+        // Check if it's a "user doesn't exist" error  
+        if (userNotExistsErrors.some(err => errorMessage.includes(err))) {
+          console.log('SignupForm: User does not exist - detected from error message');
+          return false;
+        }
+        
+        // For any other error, assume user doesn't exist to be safe
+        console.log('SignupForm: Unknown error type, assuming user does not exist');
         return false;
       }
       
-      // If signup succeeded but user is null, it might be a pending confirmation
-      // In this case, user likely exists but hasn't confirmed email
+      // If no error (successful login), user definitely exists
+      if (data.user) {
+        console.log('SignupForm: User exists - successful login detected');
+        // Sign them out immediately since this was just a check
+        await supabase.auth.signOut();
+        return true;
+      }
+      
+      // Default case - assume user doesn't exist
+      console.log('SignupForm: Default case - assuming user does not exist');
       return false;
+      
     } catch (error) {
-      console.error('Error checking if user exists:', error);
+      console.error('SignupForm: Error checking if user exists:', error);
+      // On any exception, assume user doesn't exist to allow signup attempt
       return false;
     }
   };
@@ -104,16 +148,20 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
     
     try {
       setSigningUp(true);
-      console.log('Starting registration process for:', email);
+      console.log('SignupForm: Starting registration process for:', email);
       
       // First check if user already exists
       const userExists = await checkIfUserExists(email);
+      console.log('SignupForm: User exists check result:', userExists);
+      
       if (userExists) {
-        console.log('User already exists:', email);
+        console.log('SignupForm: User already exists, showing error');
         setShowExistingUserError(true);
         toast.error('המשתמש כבר קיים במערכת');
         return;
       }
+      
+      console.log('SignupForm: User does not exist, proceeding with registration');
       
       // Clear any previous registration data
       clearRegistrationData();
@@ -138,7 +186,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       updateRegistrationData(registrationData);
       startRegistering();
       
-      console.log('Registration data saved, navigating to subscription page');
+      console.log('SignupForm: Registration data saved, navigating to subscription page');
       toast.success('הפרטים נשמרו בהצלחה - אנא בחר תכנית מנוי');
       
       // Navigate to subscription page to start the flow
@@ -148,12 +196,13 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
         onSignupSuccess();
       }
     } catch (error: any) {
-      console.error('Signup error:', error);
+      console.error('SignupForm: Signup error:', error);
       
-      // Check if it's a user already exists error
+      // Check if it's a user already exists error (backup check)
       if (error.message?.includes('User already registered') || 
           error.message?.includes('already exists') ||
           error.message?.includes('user_repeated_signup')) {
+        console.log('SignupForm: User exists error caught in backup check');
         setShowExistingUserError(true);
         toast.error('המשתמש כבר קיים במערכת');
       } else {
