@@ -1,10 +1,8 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { sendContractEmails } from '@/services/contracts/contractEmailService';
 
 /**
- * Calls the izidoc-sign edge function
+ * Calls the izidoc-sign edge function with proper error handling
  */
 export async function callIzidocSignFunction(
   userId: string,
@@ -17,20 +15,42 @@ export async function callIzidocSignFunction(
     console.log('Calling izidoc-sign edge function:', {
       userId, 
       planId, 
-      email, 
-      hasSignature: !!contractData.signature
+      email,
+      fullName,
+      hasSignature: !!contractData.signature,
+      hasContractHtml: !!contractData.contractHtml
     });
+    
+    // Validate all required fields before calling the function
+    if (!userId || !planId || !fullName || !email || !contractData?.signature || !contractData?.contractHtml) {
+      const missingFields = {
+        hasUserId: !!userId,
+        hasPlanId: !!planId,
+        hasFullName: !!fullName,
+        hasEmail: !!email,
+        hasSignature: !!contractData?.signature,
+        hasContractHtml: !!contractData?.contractHtml
+      };
+      console.error('Missing required fields for edge function:', missingFields);
+      return { 
+        success: false, 
+        error: { 
+          error: 'Missing required fields', 
+          details: missingFields 
+        } 
+      };
+    }
     
     const { data, error } = await supabase.functions.invoke('izidoc-sign', {
       body: {
         userId,
         planId,
-        fullName,
+        fullName, // Make sure fullName is included
         email,
         signature: contractData.signature,
         contractHtml: contractData.contractHtml,
-        agreedToTerms: contractData.agreedToTerms,
-        agreedToPrivacy: contractData.agreedToPrivacy,
+        agreedToTerms: contractData.agreedToTerms || false,
+        agreedToPrivacy: contractData.agreedToPrivacy || false,
         contractVersion: contractData.contractVersion || "1.0",
         browserInfo: contractData.browserInfo || {
           userAgent: navigator.userAgent,
@@ -65,119 +85,10 @@ export async function saveContractToDatabase(
   email: string,
   contractData: any
 ): Promise<{ success: boolean; data?: any; error?: any }> {
-  try {
-    console.log('Saving contract for user:', userId, 'plan:', planId);
-    
-    // Validate inputs
-    if (!userId || !contractData?.contractHtml || !contractData?.signature) {
-      const missingFields = {
-        hasUserId: !!userId,
-        hasContractHtml: !!contractData?.contractHtml,
-        hasSignature: !!contractData?.signature
-      };
-      console.error('Missing required contract data:', missingFields);
-      return { success: false, error: `Missing required contract data: ${JSON.stringify(missingFields)}` };
-    }
-    
-    // Validate that userId is a proper UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
-      console.error('Invalid userId format, must be UUID:', userId);
-      return { success: false, error: 'Invalid user ID format' };
-    }
-    
-    // Generate a unique contract ID to be used in URLs
-    const contractId = crypto.randomUUID();
-    console.log('Generated contract ID:', contractId);
-    
-    // Try to upload HTML to storage (but don't fail if it doesn't work)
-    const uploadResult = await uploadContractToStorage(userId, contractData.contractHtml, contractId);
-    
-    const pdfUrl = uploadResult.success ? uploadResult.url : null;
-    if (uploadResult.success) {
-      console.log('Contract uploaded to storage successfully');
-    } else {
-      console.warn('Failed to upload contract to storage, continuing anyway:', uploadResult.error);
-    }
-    
-    // Store contract signature in the database
-    const { data, error } = await supabase
-      .from('contract_signatures')
-      .insert({
-        id: contractId,
-        user_id: userId,
-        plan_id: planId,
-        full_name: fullName,
-        email: email,
-        signature: contractData.signature,
-        contract_html: contractData.contractHtml,
-        agreed_to_terms: contractData.agreedToTerms || false,
-        agreed_to_privacy: contractData.agreedToPrivacy || false,
-        contract_version: contractData.contractVersion || "1.0",
-        pdf_url: pdfUrl,
-        browser_info: contractData.browserInfo || {
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          platform: navigator.platform,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        }
-      })
-      .select('id, created_at')
-      .single();
-
-    if (error) {
-      console.error('Error saving contract signature:', error);
-      console.error('Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return { success: false, error: error.message || 'Database error while saving contract' };
-    }
-
-    console.log('Contract signature saved successfully:', data);
-
-    // Send contract emails (but don't fail if email sending fails)
-    try {
-      await sendContractEmails({
-        customerEmail: email,
-        customerName: fullName,
-        contractId: contractId,
-        contractHtml: contractData.contractHtml,
-        planId: planId,
-        signedAt: new Date().toISOString()
-      });
-      console.log('Contract emails sent successfully');
-    } catch (emailError) {
-      console.error('Error sending contract emails:', emailError);
-      // Continue with the flow even if email fails
-    }
-    
-    // Try to update user metadata (but don't fail if it doesn't work)
-    try {
-      await updateUserMetadata(userId, {
-        contractSignedId: contractId,
-        contractSignedAt: new Date().toISOString()
-      });
-    } catch (metadataError) {
-      console.error('Error updating user metadata:', metadataError);
-      // We continue even if this fails as the contract is already saved
-    }
-    
-    // Update subscription status (but don't fail if it doesn't work)
-    try {
-      await updateSubscriptionStatus(userId);
-    } catch (subscriptionError) {
-      console.error('Error updating subscription status:', subscriptionError);
-      // Continue even if this fails
-    }
-    
-    return { success: true, data };
-  } catch (error) {
-    console.error('Exception saving contract signature:', error);
-    return { success: false, error: error.message || 'Unknown error occurred' };
-  }
+  // This function is kept for compatibility but should not be used directly
+  // All contract processing should go through the edge function
+  console.warn('saveContractToDatabase called directly - this should go through the edge function');
+  return callIzidocSignFunction(userId, planId, fullName, email, contractData);
 }
 
 /**
@@ -191,14 +102,10 @@ export async function uploadContractToStorage(
   try {
     console.log(`Uploading contract HTML to storage for user: ${userId}, contract: ${contractId}`);
     
-    // Generate a file name based on contract ID
     const fileName = `${userId}/${contractId}.html`;
-    
-    // Prepare the file content
     const encoder = new TextEncoder();
     const bytes = encoder.encode(contractHtml);
     
-    // Upload the file to the contracts bucket
     const { data, error } = await supabase
       .storage
       .from('contracts')
@@ -214,7 +121,6 @@ export async function uploadContractToStorage(
     
     console.log('Contract uploaded successfully to storage:', data?.path);
     
-    // Create a URL for accessing the contract
     const { data: urlData } = await supabase
       .storage
       .from('contracts')

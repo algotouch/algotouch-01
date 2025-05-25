@@ -25,7 +25,14 @@ const ContractView: React.FC<ContractViewProps> = ({
     if (!selectedPlan) {
       console.error("Cannot sign contract: No plan selected");
       toast.error('אנא בחר תכנית מנוי תחילה');
-      onBack(); // Go back to plan selection
+      onBack();
+      return;
+    }
+    
+    // Validate that we have a fullName
+    if (!fullName || fullName.trim() === '') {
+      console.error("Cannot sign contract: No full name provided");
+      toast.error('שם מלא נדרש לחתימת החוזה');
       return;
     }
     
@@ -43,14 +50,14 @@ const ContractView: React.FC<ContractViewProps> = ({
     console.log('Contract signing initiated', { 
       hasUserId: !!user?.id, 
       isRegistering, 
-      planId: selectedPlan 
+      planId: selectedPlan,
+      fullName: fullName
     });
     
     // Add the plan ID to the contract data
     const enhancedContractData = {
       ...contractData,
       planId: selectedPlan,
-      // Add browser info for audit purposes
       browserInfo: {
         userAgent: navigator.userAgent,
         language: navigator.language,
@@ -85,7 +92,6 @@ const ContractView: React.FC<ContractViewProps> = ({
       console.log('Generated temp contract ID:', enhancedContractData.tempContractId);
       
       try {
-        // Parse registration data to update with contract info
         const parsedRegistrationData = JSON.parse(registrationData);
         parsedRegistrationData.contractDetails = enhancedContractData;
         parsedRegistrationData.planId = selectedPlan;
@@ -93,14 +99,13 @@ const ContractView: React.FC<ContractViewProps> = ({
         console.log('Updated registration data with contract details');
       } catch (error) {
         console.error('Error updating registration data with contract:', error);
-        // Continue with the flow even if this fails
       }
     }
 
     try {
       // Use proper UUID for userId - either the authenticated user's ID or generate a proper UUID
       const userId = user?.id || crypto.randomUUID();
-      console.log('Processing contract with userId:', userId);
+      console.log('Processing contract with userId:', userId, 'fullName:', fullName);
       
       // Validate required contract data before processing
       if (!enhancedContractData.signature || !enhancedContractData.contractHtml) {
@@ -115,18 +120,14 @@ const ContractView: React.FC<ContractViewProps> = ({
       const result = await processSignedContract(
         userId,
         selectedPlan,
-        fullName,
+        fullName, // Make sure fullName is passed correctly
         customerEmail,
         enhancedContractData
       );
 
       if (result) {
         console.log('Contract processed successfully:', result);
-        
-        // If we got a contract ID, use it, otherwise use the temp ID
         const contractIdToUse = typeof result === 'string' ? result : enhancedContractData.tempContractId || 'processed';
-        
-        // Pass the result to the parent component
         onComplete(contractIdToUse);
       } else {
         console.error('Failed to process contract');
