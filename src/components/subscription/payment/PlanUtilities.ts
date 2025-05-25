@@ -7,10 +7,11 @@ export const getPlanDetails = (planId: string) => {
         price: '371₪',
         description: 'תקופת ניסיון 30 יום חינם, אחר כך 371₪ לחודש',
         info: 'יצירת טוקן בלבד - ללא חיוב בתקופת הניסיון',
-        operationType: 3, // CreateTokenOnly
+        operationType: 3, // CreateTokenOnly - trial first, then recurring charges
         amount: 0, // No charge during trial
         hasTrial: true,
-        trialDays: 30
+        trialDays: 30,
+        recurringAmount: 371 // Amount for monthly charges after trial
       };
     case 'annual':
       return {
@@ -18,7 +19,7 @@ export const getPlanDetails = (planId: string) => {
         price: '3,371₪',
         description: 'חיוב מיידי + הנחה של 25%',
         info: 'חיוב וטוקן - תשלום עכשיו + הכנה לשנה הבאה',
-        operationType: 2, // ChargeAndCreateToken
+        operationType: 2, // ChargeAndCreateToken - immediate charge + token for next year
         amount: 3371,
         hasTrial: false
       };
@@ -28,7 +29,7 @@ export const getPlanDetails = (planId: string) => {
         price: '13,121₪',
         description: 'תשלום חד-פעמי לכל החיים',
         info: 'חיוב בלבד - ללא חיובים עתידיים',
-        operationType: 1, // ChargeOnly
+        operationType: 1, // ChargeOnly - one-time payment, no recurring
         amount: 13121,
         hasTrial: false
       };
