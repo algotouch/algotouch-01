@@ -173,7 +173,7 @@ const DigitalContractForm: React.FC<DigitalContractFormProps> = ({
               <Checkbox
                 id="terms"
                 checked={agreedToTerms}
-                onCheckedChange={setAgreedToTerms}
+                onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
               />
               <label htmlFor="terms" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                 אני מסכים לתנאי השימוש
@@ -184,7 +184,7 @@ const DigitalContractForm: React.FC<DigitalContractFormProps> = ({
               <Checkbox
                 id="privacy"
                 checked={agreedToPrivacy}
-                onCheckedChange={setAgreedToPrivacy}
+                onCheckedChange={(checked) => setAgreedToPrivacy(checked === true)}
               />
               <label htmlFor="privacy" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                 אני מסכים למדיניות הפרטיות
