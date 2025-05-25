@@ -3,6 +3,7 @@ import React from 'react';
 import ContractSection from '@/components/subscription/ContractSection';
 import { useAuth } from '@/contexts/auth';
 import { toast } from 'sonner';
+import { processSignedContract } from '@/lib/contracts/contract-service';
 
 interface ContractViewProps {
   selectedPlan: string;
@@ -58,6 +59,25 @@ const ContractView: React.FC<ContractViewProps> = ({
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       }
     };
+
+    // Extract customer email for contract processing
+    let customerEmail = user?.email;
+    
+    // If in registration flow, get email from registration data
+    if (isRegistering && registrationData) {
+      try {
+        const parsedRegistrationData = JSON.parse(registrationData);
+        customerEmail = parsedRegistrationData.email;
+      } catch (error) {
+        console.error('Error parsing registration data:', error);
+      }
+    }
+
+    if (!customerEmail) {
+      console.error('No customer email available for contract');
+      toast.error('לא ניתן לזהות כתובת מייל. אנא נסה שוב.');
+      return;
+    }
     
     // Generate temp contract ID for session storage if in registration flow
     if (isRegistering) {
@@ -75,19 +95,35 @@ const ContractView: React.FC<ContractViewProps> = ({
         console.error('Error updating registration data with contract:', error);
         // Continue with the flow even if this fails
       }
-    } else {
-      console.log('User is authenticated, using regular contract flow');
     }
-    
-    console.log('Contract signed, sending data to parent component', { 
-      planId: selectedPlan, 
-      isRegistering, 
-      hasUserId: !!user?.id,
-      contractDataSize: JSON.stringify(enhancedContractData).length
-    });
-    
-    // Pass the data to the parent component
-    onComplete(enhancedContractData);
+
+    try {
+      // Process the signed contract
+      const userId = user?.id || 'temp_user_' + Date.now();
+      const result = await processSignedContract(
+        userId,
+        selectedPlan,
+        fullName,
+        customerEmail,
+        enhancedContractData
+      );
+
+      if (result) {
+        console.log('Contract processed successfully:', result);
+        
+        // If we got a contract ID, use it, otherwise use the temp ID
+        const contractIdToUse = typeof result === 'string' ? result : enhancedContractData.tempContractId || 'processed';
+        
+        // Pass the result to the parent component
+        onComplete(contractIdToUse);
+      } else {
+        console.error('Failed to process contract');
+        toast.error('שגיאה בעיבוד החוזה. אנא נסה שוב.');
+      }
+    } catch (error) {
+      console.error('Exception processing contract:', error);
+      toast.error('שגיאה בעיבוד החוזה. אנא נסה שוב.');
+    }
   };
 
   return (

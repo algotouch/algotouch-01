@@ -1,6 +1,6 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { sendContractEmails } from '@/services/contracts/contractEmailService';
 
 /**
  * Calls the izidoc-sign edge function
@@ -55,7 +55,7 @@ export async function callIzidocSignFunction(
 }
 
 /**
- * Saves contract signature data directly to Supabase
+ * Saves contract signature data directly to Supabase and sends emails
  */
 export async function saveContractToDatabase(
   userId: string,
@@ -81,14 +81,6 @@ export async function saveContractToDatabase(
     
     const pdfUrl = uploadResult.success ? uploadResult.url : null;
     console.log(uploadResult.success ? 'Contract uploaded to storage' : 'Failed to upload contract to storage');
-    
-    // Always send email with contract to support, as a backup
-    try {
-      await sendContractByEmail(userId, fullName, email, contractData.contractHtml, contractId);
-    } catch (emailError) {
-      console.error('Error sending contract by email:', emailError);
-      // Continue even if email fails
-    }
     
     // Store contract signature in the database
     const { data, error } = await supabase
@@ -121,6 +113,22 @@ export async function saveContractToDatabase(
     }
 
     console.log('Contract signature saved successfully:', data);
+
+    // Send contract emails
+    try {
+      await sendContractEmails({
+        customerEmail: email,
+        customerName: fullName,
+        contractId: contractId,
+        contractHtml: contractData.contractHtml,
+        planId: planId,
+        signedAt: new Date().toISOString()
+      });
+      console.log('Contract emails sent successfully');
+    } catch (emailError) {
+      console.error('Error sending contract emails:', emailError);
+      // Continue with the flow even if email fails
+    }
     
     // Update user metadata with link to the contract
     try {

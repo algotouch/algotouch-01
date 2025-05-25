@@ -1,10 +1,11 @@
 
 import { toast } from 'sonner';
 import { saveContractToDatabase, updateSubscriptionStatus, callIzidocSignFunction } from './storage-service';
+import { sendContractEmails } from '@/services/contracts/contractEmailService';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
- * Processes a signed contract, saving it to the database and sending confirmation
+ * Processes a signed contract, saving it to the database and sending confirmation emails
  */
 export async function processSignedContract(
   userId: string,
@@ -41,7 +42,17 @@ export async function processSignedContract(
       
       if (success) {
         console.log('Contract processed successfully by edge function:', data);
-        toast.success('ההסכם נחתם ונשמר בהצלחה!');
+        
+        // Send contract emails
+        await sendContractConfirmationEmails(
+          email,
+          fullName,
+          data.documentId || data.contractId || 'unknown',
+          planId,
+          contractData.contractHtml || ''
+        );
+        
+        toast.success('ההסכם נחתם ונשמר בהצלחה! מייל אישור נשלח אליך');
         return data.documentId || true;
       } else {
         console.error('Edge function error:', error);
@@ -66,15 +77,62 @@ export async function processSignedContract(
     const contractId = saveResult.data?.id;
     console.log('Contract saved with ID:', contractId);
     
+    // Send contract emails
+    if (contractId) {
+      await sendContractConfirmationEmails(
+        email,
+        fullName,
+        contractId,
+        planId,
+        contractData.contractHtml || ''
+      );
+    }
+    
     // Try to update the subscription status
     await updateSubscriptionStatus(userId);
     
-    toast.success('ההסכם נחתם ונשמר בהצלחה!');
+    toast.success('ההסכם נחתם ונשמר בהצלחה! מייל אישור נשלח אליך');
     return contractId || true;
   } catch (error) {
     console.error('Exception processing contract signature:', error);
     toast.error('שגיאה בעיבוד החתימה');
     return false;
+  }
+}
+
+/**
+ * Sends contract confirmation emails to customer and support
+ */
+async function sendContractConfirmationEmails(
+  customerEmail: string,
+  customerName: string,
+  contractId: string,
+  planId: string,
+  contractHtml: string
+): Promise<void> {
+  try {
+    console.log('Sending contract confirmation emails');
+    
+    const emailResult = await sendContractEmails({
+      customerEmail,
+      customerName,
+      contractId,
+      contractHtml,
+      planId,
+      signedAt: new Date().toISOString()
+    });
+    
+    if (emailResult.success) {
+      console.log('Contract emails sent successfully');
+    } else {
+      console.error('Error sending contract emails:', emailResult.error);
+      // Don't throw error here as the contract is already saved
+      toast.warning('החוזה נשמר אך יתכן שהמייל לא נשלח. נא פנה לתמיכה');
+    }
+  } catch (error) {
+    console.error('Exception sending contract emails:', error);
+    // Don't throw error here as the contract is already saved
+    toast.warning('החוזה נשמר אך יתכן שהמייל לא נשלח. נא פנה לתמיכה');
   }
 }
 
