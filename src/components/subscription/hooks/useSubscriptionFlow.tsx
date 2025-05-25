@@ -110,6 +110,7 @@ export const useSubscriptionFlow = () => {
         }
         
         // Check if user has active subscription
+        let hasActiveSubscriptionCheck = false;
         if (isAuthenticated && user) {
           const { data: subscriptionData, error } = await supabase
             .from('subscriptions')
@@ -119,6 +120,7 @@ export const useSubscriptionFlow = () => {
             .single();
             
           if (subscriptionData && !error) {
+            hasActiveSubscriptionCheck = true;
             setHasActiveSubscription(true);
           }
         }
@@ -131,7 +133,7 @@ export const useSubscriptionFlow = () => {
           selectedPlan: planId || registrationData?.planId,
           fullName: derivedFullName,
           currentStep,
-          hasActiveSubscription: !!subscriptionData
+          hasActiveSubscription: hasActiveSubscriptionCheck
         });
         
       } catch (error) {
