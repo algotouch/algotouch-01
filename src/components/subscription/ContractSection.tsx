@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DigitalContractForm from '@/components/DigitalContractForm';
 import { Button } from '@/components/ui/button';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, User } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth';
 
@@ -20,13 +20,28 @@ const ContractSection: React.FC<ContractSectionProps> = ({
   onBack 
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const { user } = useAuth();
+  const { user, registrationData } = useAuth();
+  
+  // Log the received fullName for debugging
+  useEffect(() => {
+    console.log('ContractSection: Received props:', {
+      selectedPlan,
+      fullName,
+      hasUser: !!user,
+      hasRegistrationData: !!registrationData
+    });
+  }, [selectedPlan, fullName, user, registrationData]);
   
   // Function to handle contract signing
   const handleSignContract = async (contractData: any) => {
     try {
       setIsProcessing(true);
-      console.log('Contract signed, forwarding data to parent component');
+      console.log('ContractSection: Contract signed with data:', {
+        hasSignature: !!contractData.signature,
+        hasContractHtml: !!contractData.contractHtml,
+        fullName,
+        selectedPlan
+      });
       
       // Add a small delay to show the processing state
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -34,6 +49,7 @@ const ContractSection: React.FC<ContractSectionProps> = ({
       // Pass the contract data directly to the parent along with user information
       onSign({
         ...contractData,
+        fullName, // Ensure fullName is passed through
         userId: user?.id // This will be undefined if the user isn't authenticated
       });
     } catch (error) {
@@ -51,6 +67,15 @@ const ContractSection: React.FC<ContractSectionProps> = ({
           אנא קרא את ההסכם בעיון וחתום במקום המיועד בתחתית העמוד
         </AlertDescription>
       </Alert>
+
+      {fullName && (
+        <Alert className="mb-4 border-blue-200 bg-blue-50">
+          <User className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>חותם על ההסכם:</strong> {fullName}
+          </AlertDescription>
+        </Alert>
+      )}
       
       <DigitalContractForm 
         onSign={handleSignContract}

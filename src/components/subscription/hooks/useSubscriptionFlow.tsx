@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase-client';
@@ -16,6 +17,67 @@ export const useSubscriptionFlow = () => {
   const [fullName, setFullName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+
+  // Get fullName from multiple sources with priority
+  const getFullNameFromSources = async () => {
+    console.log('useSubscriptionFlow: Getting fullName from sources', {
+      hasRegistrationData: !!registrationData,
+      hasUser: !!user,
+      isAuthenticated
+    });
+
+    // Priority 1: Registration data (for signup flow)
+    if (registrationData?.userData) {
+      const { firstName, lastName } = registrationData.userData;
+      const regFullName = `${firstName || ''} ${lastName || ''}`.trim();
+      if (regFullName) {
+        console.log('useSubscriptionFlow: Using fullName from registration data:', regFullName);
+        return regFullName;
+      }
+    }
+
+    // Priority 2: Check session storage for registration data
+    try {
+      const sessionData = sessionStorage.getItem('registration_data');
+      if (sessionData) {
+        const parsedData = JSON.parse(sessionData);
+        if (parsedData.userData) {
+          const { firstName, lastName } = parsedData.userData;
+          const sessionFullName = `${firstName || ''} ${lastName || ''}`.trim();
+          if (sessionFullName) {
+            console.log('useSubscriptionFlow: Using fullName from session storage:', sessionFullName);
+            return sessionFullName;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error parsing session storage registration data:', error);
+    }
+
+    // Priority 3: User profile from database (for authenticated users)
+    if (isAuthenticated && user) {
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', user.id)
+          .single();
+          
+        if (profileData) {
+          const profileFullName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+          if (profileFullName) {
+            console.log('useSubscriptionFlow: Using fullName from user profile:', profileFullName);
+            return profileFullName;
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching user profile:', error);
+      }
+    }
+
+    console.log('useSubscriptionFlow: No fullName found from any source');
+    return '';
+  };
 
   // Initialize subscription flow based on auth state and URL parameters
   useEffect(() => {
@@ -42,7 +104,6 @@ export const useSubscriptionFlow = () => {
           // If contract is signed, move to payment step
           if (registrationData.contractSigned) {
             setCurrentStep('payment');
-            // You'd also need to get the contractId here
           } else {
             setCurrentStep('contract');
           }
@@ -60,23 +121,19 @@ export const useSubscriptionFlow = () => {
           if (subscriptionData && !error) {
             setHasActiveSubscription(true);
           }
-          
-          // Set full name for contract signing
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('first_name, last_name')
-            .eq('id', user.id)
-            .single();
-            
-          if (profileData) {
-            setFullName(`${profileData.first_name || ''} ${profileData.last_name || ''}`.trim());
-          }
-        } 
-        // If in registration flow, get name from registration data
-        else if (registrationData?.userData) {
-          const { firstName, lastName } = registrationData.userData;
-          setFullName(`${firstName || ''} ${lastName || ''}`.trim());
         }
+        
+        // Get and set fullName
+        const derivedFullName = await getFullNameFromSources();
+        setFullName(derivedFullName);
+        
+        console.log('useSubscriptionFlow: Initialization complete', {
+          selectedPlan: planId || registrationData?.planId,
+          fullName: derivedFullName,
+          currentStep,
+          hasActiveSubscription: !!subscriptionData
+        });
+        
       } catch (error) {
         console.error('Error initializing subscription flow:', error);
         toast.error('אירעה שגיאה בטעינת נתוני ההרשמה');
@@ -110,7 +167,6 @@ export const useSubscriptionFlow = () => {
       setRegistrationData({ 
         ...registrationData, 
         contractSigned: true 
-        // Fixed: removed contractSignedAt property which was causing the error
       });
     }
     

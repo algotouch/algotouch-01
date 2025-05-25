@@ -18,10 +18,49 @@ const ContractView: React.FC<ContractViewProps> = ({
   onComplete,
   onBack
 }) => {
-  const { user } = useAuth();
+  const { user, registrationData } = useAuth();
+
+  // Get fullName from multiple sources with fallback priority
+  const getFullName = () => {
+    console.log('ContractView: Getting full name from sources:', {
+      propFullName: fullName,
+      registrationData: registrationData?.userData,
+      userProfile: { user: !!user }
+    });
+
+    // Priority 1: Passed fullName prop
+    if (fullName && fullName.trim() !== '') {
+      console.log('ContractView: Using fullName from props:', fullName);
+      return fullName.trim();
+    }
+
+    // Priority 2: Registration data
+    if (registrationData?.userData) {
+      const { firstName, lastName } = registrationData.userData;
+      const regFullName = `${firstName || ''} ${lastName || ''}`.trim();
+      if (regFullName) {
+        console.log('ContractView: Using fullName from registration data:', regFullName);
+        return regFullName;
+      }
+    }
+
+    console.warn('ContractView: No fullName available from any source');
+    return '';
+  };
+
+  const effectiveFullName = getFullName();
 
   const handleContractSign = async (contractData: any) => {
-    // Additional validation to ensure we have a plan selected
+    console.log('ContractView: Contract signing initiated with data:', {
+      hasSignature: !!contractData.signature,
+      hasContractHtml: !!contractData.contractHtml,
+      effectiveFullName,
+      selectedPlan,
+      hasUser: !!user?.id,
+      hasRegistrationData: !!registrationData
+    });
+
+    // Validate that we have a plan selected
     if (!selectedPlan) {
       console.error("Cannot sign contract: No plan selected");
       toast.error('אנא בחר תכנית מנוי תחילה');
@@ -30,15 +69,15 @@ const ContractView: React.FC<ContractViewProps> = ({
     }
     
     // Validate that we have a fullName
-    if (!fullName || fullName.trim() === '') {
-      console.error("Cannot sign contract: No full name provided");
-      toast.error('שם מלא נדרש לחתימת החוזה');
+    if (!effectiveFullName || effectiveFullName.trim() === '') {
+      console.error("Cannot sign contract: No full name available from any source");
+      toast.error('שם מלא נדרש לחתימת החוזה. אנא וודא שמילאת את השדות הנדרשים.');
       return;
     }
     
     // Check if we have registration data in the session (for users in the signup flow)
-    const registrationData = sessionStorage.getItem('registration_data');
-    const isRegistering = registrationData ? true : false;
+    const registrationDataFromSession = sessionStorage.getItem('registration_data');
+    const isRegistering = registrationDataFromSession ? true : false;
 
     // If user is not authenticated and we're not in the registration flow, show error
     if (!user?.id && !isRegistering) {
@@ -47,17 +86,18 @@ const ContractView: React.FC<ContractViewProps> = ({
       return;
     }
     
-    console.log('Contract signing initiated', { 
+    console.log('Contract signing proceeding with:', { 
       hasUserId: !!user?.id, 
       isRegistering, 
       planId: selectedPlan,
-      fullName: fullName
+      fullName: effectiveFullName
     });
     
     // Add the plan ID to the contract data
     const enhancedContractData = {
       ...contractData,
       planId: selectedPlan,
+      fullName: effectiveFullName, // Ensure fullName is in contract data
       browserInfo: {
         userAgent: navigator.userAgent,
         language: navigator.language,
@@ -71,9 +111,9 @@ const ContractView: React.FC<ContractViewProps> = ({
     let customerEmail = user?.email;
     
     // If in registration flow, get email from registration data
-    if (isRegistering && registrationData) {
+    if (isRegistering && registrationDataFromSession) {
       try {
-        const parsedRegistrationData = JSON.parse(registrationData);
+        const parsedRegistrationData = JSON.parse(registrationDataFromSession);
         customerEmail = parsedRegistrationData.email;
       } catch (error) {
         console.error('Error parsing registration data:', error);
@@ -92,7 +132,7 @@ const ContractView: React.FC<ContractViewProps> = ({
       console.log('Generated temp contract ID:', enhancedContractData.tempContractId);
       
       try {
-        const parsedRegistrationData = JSON.parse(registrationData);
+        const parsedRegistrationData = JSON.parse(registrationDataFromSession);
         parsedRegistrationData.contractDetails = enhancedContractData;
         parsedRegistrationData.planId = selectedPlan;
         sessionStorage.setItem('registration_data', JSON.stringify(parsedRegistrationData));
@@ -105,7 +145,7 @@ const ContractView: React.FC<ContractViewProps> = ({
     try {
       // Use proper UUID for userId - either the authenticated user's ID or generate a proper UUID
       const userId = user?.id || crypto.randomUUID();
-      console.log('Processing contract with userId:', userId, 'fullName:', fullName);
+      console.log('Processing contract with userId:', userId, 'fullName:', effectiveFullName);
       
       // Validate required contract data before processing
       if (!enhancedContractData.signature || !enhancedContractData.contractHtml) {
@@ -120,7 +160,7 @@ const ContractView: React.FC<ContractViewProps> = ({
       const result = await processSignedContract(
         userId,
         selectedPlan,
-        fullName, // Make sure fullName is passed correctly
+        effectiveFullName, // Use the effective full name
         customerEmail,
         enhancedContractData
       );
@@ -140,13 +180,43 @@ const ContractView: React.FC<ContractViewProps> = ({
     }
   };
 
+  // If no fullName available, show error
+  if (!effectiveFullName) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-8">
+          <h3 className="text-lg font-semibold text-red-600 mb-2">
+            חסר שם מלא
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            לא ניתן להמשיך בחתימת החוזה ללא שם מלא. אנא חזור ומלא את הפרטים הנדרשים.
+          </p>
+          <button onClick={onBack} className="btn btn-primary">
+            חזור למילוי פרטים
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <ContractSection
-      selectedPlan={selectedPlan}
-      fullName={fullName}
-      onSign={handleContractSign}
-      onBack={onBack}
-    />
+    <div className="space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <p className="text-sm text-blue-800">
+          <strong>חותם:</strong> {effectiveFullName}
+        </p>
+        <p className="text-sm text-blue-600 mt-1">
+          אנא ודא שהשם המוצג נכון לפני החתימה
+        </p>
+      </div>
+      
+      <ContractSection
+        selectedPlan={selectedPlan}
+        fullName={effectiveFullName}
+        onSign={handleContractSign}
+        onBack={onBack}
+      />
+    </div>
   );
 };
 
