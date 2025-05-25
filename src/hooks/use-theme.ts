@@ -1,20 +1,36 @@
 
 import { useTheme as useNextThemes } from 'next-themes';
+import { useEffect, useState } from 'react';
 
-// Export the hook with the same interface as our previous custom hook
+// Export the hook with proper error handling and mounting check
 export const useTheme = () => {
-  // Use try-catch to handle potential initialization issues
+  const [mounted, setMounted] = useState(false);
+
+  // Ensure component is mounted before using theme
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   try {
-    const { theme, setTheme, resolvedTheme } = useNextThemes();
+    const themeData = useNextThemes();
     
-    return { 
-      theme, 
-      setTheme,
-      resolvedTheme 
+    // Return safe defaults until mounted
+    if (!mounted) {
+      return {
+        theme: 'dark',
+        setTheme: () => {},
+        resolvedTheme: 'dark'
+      };
+    }
+    
+    return {
+      theme: themeData.theme || 'dark',
+      setTheme: themeData.setTheme,
+      resolvedTheme: themeData.resolvedTheme || 'dark'
     };
   } catch (error) {
-    // Fallback if next-themes isn't initialized yet
     console.error('Theme hook error:', error);
+    // Return safe fallback
     return {
       theme: 'dark',
       setTheme: () => console.warn('Theme provider not ready'),

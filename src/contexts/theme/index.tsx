@@ -2,14 +2,34 @@
 import React from 'react';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-// Re-export the hook
-export { useTheme } from '@/hooks/use-theme';
+// Create a wrapper component to ensure proper initialization
+const ThemeProviderWrapper = ({ children }: { children: React.ReactNode }) => {
+  // Use a simple state to ensure component is mounted before initializing themes
+  const [mounted, setMounted] = React.useState(false);
 
-// For backward compatibility, we wrap the next-themes provider
-export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Don't render the theme provider until component is mounted
+  if (!mounted) {
+    return <>{children}</>;
+  }
+
   return (
-    <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+    <NextThemesProvider 
+      attribute="class" 
+      defaultTheme="dark" 
+      enableSystem={false}
+      storageKey="theme"
+    >
       {children}
     </NextThemesProvider>
   );
 };
+
+// Export the wrapper as ThemeProvider
+export const ThemeProvider = ThemeProviderWrapper;
+
+// Re-export the hook with error handling
+export { useTheme } from '@/hooks/use-theme';
