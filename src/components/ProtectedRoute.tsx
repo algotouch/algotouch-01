@@ -25,6 +25,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   
   const location = useLocation();
   
+  console.log('ProtectedRoute: Current state', {
+    path: location.pathname,
+    isAuthenticated,
+    hasRegistrationData: !!registrationData,
+    pendingSubscription,
+    loading,
+    initialized
+  });
+  
   // Show loading while auth is initializing
   if (!initialized || loading) {
     return (
@@ -47,7 +56,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <>{children}</>;
   }
 
-  // Special handling for subscription page - simplified logic
+  // Special handling for subscription page
   if (location.pathname === '/subscription' || location.pathname.startsWith('/subscription/')) {
     console.log('ProtectedRoute: Subscription page access check', {
       isAuthenticated,
@@ -57,10 +66,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     
     // Allow access if user is authenticated OR has valid registration data
     if (isAuthenticated || (registrationData && pendingSubscription)) {
+      console.log('ProtectedRoute: Allowing access to subscription page');
       return <>{children}</>;
     }
     
-    // Only redirect to auth if we don't have any valid state
     console.log('ProtectedRoute: No valid auth state for subscription, redirecting to auth');
     return <Navigate to="/auth?tab=signup&reason=subscription" replace />;
   }

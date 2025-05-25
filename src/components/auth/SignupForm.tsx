@@ -29,9 +29,10 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
   const [showExistingUserError, setShowExistingUserError] = useState(false);
 
   const startRegistering = () => {
-    // Simple function to start registration process
+    console.log('SignupForm: Starting registration process');
     updateRegistrationData({
       email,
+      password,
       userData: { firstName, lastName, phone },
       registrationTime: new Date().toISOString()
     });
@@ -41,11 +42,14 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
     e.preventDefault();
     setShowExistingUserError(false);
     
+    console.log('SignupForm: Handle signup clicked');
+    
     // Validate inputs
     const validationErrors = validateSignupInputs(firstName, lastName, email, phone, password, passwordConfirm);
     setErrors(validationErrors);
     
     if (Object.keys(validationErrors).length > 0) {
+      console.log('SignupForm: Validation errors found:', validationErrors);
       return;
     }
     
@@ -64,23 +68,17 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
       );
       
       if (result.success) {
-        console.log('SignupForm: Registration successful, navigating to subscription page');
+        console.log('SignupForm: Registration successful');
         
-        // Clear redirect counters before navigation
-        Object.keys(sessionStorage).forEach(key => {
-          if (key.startsWith('redirect_count_')) {
-            sessionStorage.removeItem(key);
-          }
-        });
-        
-        // Force navigation to subscription page - remove replace: true to ensure proper navigation
-        console.log('SignupForm: Forcing navigation to /subscription');
-        navigate('/subscription');
+        // Force navigation to subscription page
+        console.log('SignupForm: Navigating to subscription page');
+        navigate('/subscription', { replace: true });
         
         if (onSignupSuccess) {
           onSignupSuccess();
         }
       } else if (result.userExists) {
+        console.log('SignupForm: User already exists');
         setShowExistingUserError(true);
       }
     } catch (error) {
