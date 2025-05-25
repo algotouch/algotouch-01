@@ -8,6 +8,7 @@ export const useUnifiedRegistrationData = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [pendingSubscription, setPendingSubscription] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [currentStep, setCurrentStep] = useState<string>('signup');
 
   useEffect(() => {
     const loadData = () => {
@@ -20,6 +21,15 @@ export const useUnifiedRegistrationData = () => {
           // Set pendingSubscription if we have registration data with a plan
           if (data.planId) {
             setPendingSubscription(true);
+          }
+          
+          // Set current step based on data completeness
+          if (data.contractDetails?.contractSigned) {
+            setCurrentStep('payment');
+          } else if (data.planId) {
+            setCurrentStep('contract');
+          } else {
+            setCurrentStep('plan_selection');
           }
         }
         
@@ -40,7 +50,7 @@ export const useUnifiedRegistrationData = () => {
   }, []);
 
   const updateRegistrationData = (newData: Partial<RegistrationData>) => {
-    if (!registrationData) return;
+    if (!registrationData && !newData) return;
     
     const updatedData = { ...registrationData, ...newData };
     setRegistrationData(updatedData);
@@ -49,6 +59,12 @@ export const useUnifiedRegistrationData = () => {
     // Update pendingSubscription based on plan selection
     if (newData.planId) {
       setPendingSubscription(true);
+      setCurrentStep('contract');
+    }
+    
+    // Update step based on new data
+    if (newData.contractDetails?.contractSigned) {
+      setCurrentStep('payment');
     }
   };
 
@@ -58,6 +74,7 @@ export const useUnifiedRegistrationData = () => {
     setRegistrationData(null);
     setPendingSubscription(false);
     setIsRegistering(false);
+    setCurrentStep('signup');
   };
 
   const startRegistering = () => {
@@ -66,6 +83,48 @@ export const useUnifiedRegistrationData = () => {
 
   const stopRegistering = () => {
     setIsRegistering(false);
+  };
+
+  const saveRegistrationStep = async (step: string, data: any) => {
+    try {
+      const tempRegId = localStorage.getItem('temp_registration_id') || 
+                        `temp_reg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      
+      if (!localStorage.getItem('temp_registration_id')) {
+        localStorage.setItem('temp_registration_id', tempRegId);
+      }
+
+      const registrationRecord = {
+        id: tempRegId,
+        registration_data: { ...registrationData, ...data, currentStep: step },
+        step_completed: step,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+        used: false
+      };
+
+      // Store locally first
+      updateRegistrationData(data);
+      setCurrentStep(step);
+      
+      console.log('Registration step saved:', { step, tempRegId });
+      return { success: true, registrationId: tempRegId };
+    } catch (error) {
+      console.error('Error saving registration step:', error);
+      setRegistrationError('שגיאה בשמירת שלב ההרשמה');
+      return { success: false, error };
+    }
+  };
+
+  const getRegistrationProgress = () => {
+    const steps = ['signup', 'plan_selection', 'contract', 'payment', 'completed'];
+    const currentIndex = steps.indexOf(currentStep);
+    return {
+      currentStep,
+      currentStepIndex: currentIndex,
+      totalSteps: steps.length,
+      progressPercentage: Math.round((currentIndex / (steps.length - 1)) * 100),
+      isComplete: currentStep === 'completed'
+    };
   };
 
   return {
@@ -77,6 +136,10 @@ export const useUnifiedRegistrationData = () => {
     pendingSubscription,
     isRegistering,
     startRegistering,
-    stopRegistering
+    stopRegistering,
+    currentStep,
+    setCurrentStep,
+    saveRegistrationStep,
+    getRegistrationProgress
   };
 };

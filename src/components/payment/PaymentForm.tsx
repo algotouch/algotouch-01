@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { CreditCard, AlertTriangle } from 'lucide-react';
+import { CreditCard, AlertTriangle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import PaymentDetails from './PaymentDetails';
@@ -35,8 +35,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
     registrationError,
     updateRegistrationData,
     clearRegistrationData,
-    isLoading
+    isLoading,
+    saveRegistrationStep,
+    getRegistrationProgress
   } = useUnifiedRegistrationData();
+
+  const progress = getRegistrationProgress();
 
   useEffect(() => {
     if (isLoading) return;
@@ -47,6 +51,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       return;
     }
     
+    // Auto-fill cardholder name from registration data
     if (registrationData.userData?.firstName && registrationData.userData?.lastName && !cardholderName) {
       setCardholderName(`${registrationData.userData.firstName} ${registrationData.userData.lastName}`);
     }
@@ -58,7 +63,11 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
   }, [registrationData, isLoading, cardholderName, navigate]);
 
   const planDetails = getSubscriptionPlans();
-  const plan = planId === 'annual' ? planDetails.annual : planDetails.monthly;
+  const plan = planId === 'annual' 
+    ? planDetails.annual 
+    : planId === 'vip' 
+      ? planDetails.vip 
+      : planDetails.monthly;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,10 +88,25 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       
       const tokenData = createTokenData(cardNumber, expiryDate, cardholderName);
       
-      // Update registration data with token information - ensure token is a string
+      // Save payment step
+      const stepResult = await saveRegistrationStep('payment', {
+        paymentToken: {
+          token: String(tokenData.token || `sim_${Date.now()}`),
+          last4Digits: tokenData.lastFourDigits,
+          expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
+          cardholderName: tokenData.cardholderName
+        },
+        planId
+      });
+
+      if (!stepResult.success) {
+        throw new Error('שגיאה בשמירת פרטי התשלום');
+      }
+      
+      // Update registration data with token information
       updateRegistrationData({
         paymentToken: {
-          token: String(tokenData.token || `sim_${Date.now()}`), // Ensure it's a string
+          token: String(tokenData.token || `sim_${Date.now()}`),
           last4Digits: tokenData.lastFourDigits,
           expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
           cardholderName: tokenData.cardholderName
@@ -90,7 +114,16 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       });
       
       const result = await registerUser({
-        registrationData,
+        registrationData: {
+          ...registrationData,
+          planId,
+          paymentToken: {
+            token: String(tokenData.token || `sim_${Date.now()}`),
+            last4Digits: tokenData.lastFourDigits,
+            expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
+            cardholderName: tokenData.cardholderName
+          }
+        },
         tokenData
       });
       
@@ -102,6 +135,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
         localStorage.setItem('temp_registration_id', result.registrationId);
         setRegistrationId(result.registrationId);
       }
+      
+      // Save completion step
+      await saveRegistrationStep('completed', { 
+        registrationCompleted: true,
+        completedAt: new Date().toISOString()
+      });
       
       toast.success('התשלום נקלט בהצלחה! נרשמת לתקופת ניסיון חינם');
       
@@ -152,6 +191,20 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
           <CardTitle>פרטי תשלום</CardTitle>
         </div>
         <CardDescription>הזן את פרטי כרטיס האשראי שלך לתשלום</CardDescription>
+        
+        {/* Progress indicator */}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            <span>שלב {progress.currentStepIndex + 1} מתוך {progress.totalSteps}</span>
+          </div>
+          <div className="w-full bg-secondary h-2 rounded-full">
+            <div 
+              className="bg-primary h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress.progressPercentage}%` }}
+            />
+          </div>
+        </div>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -173,6 +226,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
             planName={plan.name} 
             price={plan.price} 
             description={plan.description} 
+            currency={plan.currency}
           />
           
           <Separator />

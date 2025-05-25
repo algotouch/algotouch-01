@@ -944,21 +944,27 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          payment_session_id: string | null
           registration_data: Json
+          step_completed: string | null
           used: boolean
         }
         Insert: {
           created_at?: string
           expires_at: string
           id?: string
+          payment_session_id?: string | null
           registration_data: Json
+          step_completed?: string | null
           used?: boolean
         }
         Update: {
           created_at?: string
           expires_at?: string
           id?: string
+          payment_session_id?: string | null
           registration_data?: Json
+          step_completed?: string | null
           used?: boolean
         }
         Relationships: []
