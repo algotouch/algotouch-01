@@ -24,16 +24,20 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   
   const {
     pendingSubscription,
-    isRegistering
+    isRegistering,
+    isLoading: regDataLoading
   } = useUnifiedRegistrationData();
   
   const location = useLocation();
   
-  // Show consistent loader while auth is initializing
-  if (!initialized || loading) {
+  // Show consistent loader while auth is initializing or data is loading
+  if (!initialized || loading || regDataLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Spinner size="lg" />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-background/90">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">טוען...</p>
+        </div>
       </div>
     );
   }
@@ -56,7 +60,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       return <>{children}</>;
     }
     console.log("ProtectedRoute: User is not authenticated for subscription, redirecting to auth");
-    return <Navigate to="/auth" state={{ from: location, redirectToSubscription: true }} replace />;
+    return <Navigate to="/auth?tab=signup" state={{ from: location, redirectToSubscription: true }} replace />;
   }
 
   // Standard auth checks

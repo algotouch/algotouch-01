@@ -88,17 +88,24 @@ const Auth = () => {
     );
   }
 
-  // If user is already authenticated, redirect to dashboard or subscription
+  // If user is already authenticated, handle different redirect scenarios
   if (isAuthenticated) {
-    console.log("Auth page: User is authenticated, redirecting to appropriate page");
-    if (state?.redirectToSubscription || pendingSubscription) {
-      return <Navigate to="/subscription" replace />;
+    console.log("Auth page: User is authenticated");
+    
+    // If we have stale registration data, clear it first
+    if (registrationData) {
+      console.log("Auth: Clearing stale registration data for authenticated user");
+      clearRegistrationData();
+      sessionStorage.removeItem('registration_data');
     }
+    
+    // Always redirect authenticated users to dashboard
+    // Don't redirect to subscription page from here to prevent loops
     return <Navigate to="/dashboard" replace />;
   }
 
-  // If pending subscription, also redirect to subscription page
-  if (pendingSubscription) {
+  // If pending subscription without authentication, redirect to subscription
+  if (pendingSubscription && !isAuthenticated) {
     return <Navigate to="/subscription" replace />;
   }
 

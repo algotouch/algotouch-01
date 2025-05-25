@@ -8,16 +8,17 @@ import { toast } from 'sonner';
 import { useSubscriptionContext } from '@/contexts/subscription/SubscriptionContext';
 import { useAuth } from '@/contexts/auth';
 import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
+import { Spinner } from '@/components/ui/spinner';
 
 const SubscriptionContent = () => {
-  const { hasActiveSubscription } = useSubscriptionContext();
+  const { hasActiveSubscription, isCheckingSubscription } = useSubscriptionContext();
   const { isAuthenticated } = useAuth();
-  const { registrationData, clearRegistrationData } = useUnifiedRegistrationData();
+  const { registrationData, clearRegistrationData, isLoading: regDataLoading } = useUnifiedRegistrationData();
   const {
     currentStep,
     selectedPlan,
     fullName,
-    isLoading,
+    isLoading: flowLoading,
     handlePlanSelect,
     handleContractSign,
     handlePaymentComplete,
@@ -25,46 +26,64 @@ const SubscriptionContent = () => {
     contractId
   } = useSubscriptionFlow();
 
+  const isLoading = regDataLoading || flowLoading || isCheckingSubscription;
+
   // Clear registration data if the user already has an active subscription
   useEffect(() => {
-    if (hasActiveSubscription) {
-      // Clear registration data to prevent showing "complete registration" message
+    if (hasActiveSubscription && registrationData) {
+      console.log('SubscriptionContent: User has active subscription, clearing registration data');
       clearRegistrationData();
       sessionStorage.removeItem('registration_data');
       toast.info('כבר יש לך מנוי פעיל');
     }
-  }, [hasActiveSubscription, clearRegistrationData]);
+  }, [hasActiveSubscription, registrationData, clearRegistrationData]);
 
-  // If user is authenticated but has registration data, it means they're already signed up
+  // If user is authenticated but has registration data, it means they completed signup
   // Clear the registration data and show a message
   useEffect(() => {
-    if (isAuthenticated && registrationData) {
-      console.log('Authenticated user found with registration data, clearing and redirecting');
+    if (isAuthenticated && registrationData && !hasActiveSubscription) {
+      console.log('SubscriptionContent: Authenticated user with registration data but no active subscription');
+      // Don't clear registration data here - let them continue the subscription process
+      toast.info('אתה מחובר למערכת - אנא השלם את תהליך הרכישת המנוי');
+    } else if (isAuthenticated && registrationData && hasActiveSubscription) {
+      console.log('SubscriptionContent: Authenticated user with registration data and active subscription, clearing');
       clearRegistrationData();
       sessionStorage.removeItem('registration_data');
-      toast.info('אתה כבר מחובר למערכת');
     }
-  }, [isAuthenticated, registrationData, clearRegistrationData]);
+  }, [isAuthenticated, registrationData, hasActiveSubscription, clearRegistrationData]);
+
+  // Show loading state while data is being loaded
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">טוען נתוני מנוי...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user has active subscription, redirect to my-subscription page
+  if (isAuthenticated && hasActiveSubscription) {
+    console.log('SubscriptionContent: User has active subscription, redirecting to my-subscription page');
+    return <Navigate to="/my-subscription" replace />;
+  }
 
   // If no registration data and user is not authenticated, redirect to signup
-  useEffect(() => {
-    if (!isLoading && !registrationData && !isAuthenticated) {
-      console.log('No registration data and not authenticated, redirecting to auth page');
-      toast.error('נתוני הרשמה חסרים, אנא התחל תהליך הרשמה מחדש');
-      // Use a small delay to allow other effects to complete
-      setTimeout(() => {
-        window.location.href = '/auth?tab=signup';
-      }, 100);
-      return;
-    }
-  }, [isLoading, registrationData, isAuthenticated]);
+  if (!registrationData && !isAuthenticated) {
+    console.log('SubscriptionContent: No registration data and not authenticated, redirecting to auth page');
+    toast.error('נתוני הרשמה חסרים, אנא התחל תהליך הרשמה מחדש');
+    return <Navigate to="/auth?tab=signup" replace />;
+  }
 
   // Additional validation every time the step changes
   useEffect(() => {
-    console.log(`Current step changed to: ${currentStep}`, {
+    console.log(`SubscriptionContent: Current step changed to: ${currentStep}`, {
       selectedPlan,
       contractId,
-      isAuthenticated
+      isAuthenticated,
+      hasActiveSubscription
     });
     
     // Strict validation to ensure steps are followed in sequence
@@ -79,23 +98,7 @@ const SubscriptionContent = () => {
       handleBackToStep('plan-selection');
     }
     
-  }, [currentStep, selectedPlan, contractId, isAuthenticated, handleBackToStep]);
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="h-12 w-12 rounded-full border-4 border-t-primary animate-spin"></div>
-      </div>
-    );
-  }
-
-  if (isAuthenticated && hasActiveSubscription) {
-    console.log('User has active subscription, redirecting to my-subscription page');
-    return <Navigate to="/my-subscription" replace />;
-  }
-
-  // If authenticated but no active subscription, let them see the subscription page
-  // (this handles cases where user is logged in but needs to complete subscription)
+  }, [currentStep, selectedPlan, contractId, isAuthenticated, hasActiveSubscription, handleBackToStep]);
 
   return (
     <div className="max-w-5xl mx-auto px-4" dir="rtl">
