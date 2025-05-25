@@ -1,33 +1,36 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import ContractSection from '@/components/subscription/ContractSection';
 import { useAuth } from '@/contexts/auth';
 import { toast } from 'sonner';
 import { processSignedContract } from '@/lib/contracts/contract-service';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+
 interface ContractViewProps {
   selectedPlan: string;
   fullName: string;
   onComplete: (contractId: string) => void;
   onBack: () => void;
 }
+
 const ContractView: React.FC<ContractViewProps> = ({
   selectedPlan,
   fullName,
   onComplete,
   onBack
 }) => {
-  const {
-    user,
-    registrationData
-  } = useAuth();
+  const { user, registrationData } = useAuth();
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   // Get fullName from multiple sources with fallback priority
   const getFullName = () => {
     console.log('ContractView: Getting full name from sources:', {
       propFullName: fullName,
       registrationData: registrationData?.userData,
-      userProfile: {
-        user: !!user
-      }
+      userProfile: { user: !!user }
     });
 
     // Priority 1: Passed fullName prop
@@ -38,10 +41,7 @@ const ContractView: React.FC<ContractViewProps> = ({
 
     // Priority 2: Registration data
     if (registrationData?.userData) {
-      const {
-        firstName,
-        lastName
-      } = registrationData.userData;
+      const { firstName, lastName } = registrationData.userData;
       const regFullName = `${firstName || ''} ${lastName || ''}`.trim();
       if (regFullName) {
         console.log('ContractView: Using fullName from registration data:', regFullName);
@@ -51,7 +51,9 @@ const ContractView: React.FC<ContractViewProps> = ({
     console.warn('ContractView: No fullName available from any source');
     return '';
   };
+
   const effectiveFullName = getFullName();
+
   const handleContractSign = async (contractData: any) => {
     console.log('ContractView: Contract signing initiated with data:', {
       hasSignature: !!contractData.signature,
@@ -61,6 +63,9 @@ const ContractView: React.FC<ContractViewProps> = ({
       hasUser: !!user?.id,
       hasRegistrationData: !!registrationData
     });
+
+    // Reset previous error
+    setLastError(null);
 
     // Validate that we have a plan selected
     if (!selectedPlan) {
@@ -87,6 +92,7 @@ const ContractView: React.FC<ContractViewProps> = ({
       toast.error('משתמש לא מזוהה. אנא התחבר או הירשם תחילה.');
       return;
     }
+
     console.log('Contract signing proceeding with:', {
       hasUserId: !!user?.id,
       isRegistering,
@@ -99,7 +105,6 @@ const ContractView: React.FC<ContractViewProps> = ({
       ...contractData,
       planId: selectedPlan,
       fullName: effectiveFullName,
-      // Ensure fullName is in contract data
       browserInfo: {
         userAgent: navigator.userAgent,
         language: navigator.language,
@@ -121,6 +126,7 @@ const ContractView: React.FC<ContractViewProps> = ({
         console.error('Error parsing registration data:', error);
       }
     }
+
     if (!customerEmail) {
       console.error('No customer email available for contract');
       toast.error('לא ניתן לזהות כתובת מייל. אנא נסה שוב.');
@@ -141,8 +147,8 @@ const ContractView: React.FC<ContractViewProps> = ({
         console.error('Error updating registration data with contract:', error);
       }
     }
+
     try {
-      // Use proper UUID for userId - either the authenticated user's ID or generate a proper UUID
       const userId = user?.id || crypto.randomUUID();
       console.log('Processing contract with userId:', userId, 'fullName:', effectiveFullName);
 
@@ -155,27 +161,46 @@ const ContractView: React.FC<ContractViewProps> = ({
         toast.error('חסרים נתונים נדרשים לחתימה. אנא נסה שוב.');
         return;
       }
-      const result = await processSignedContract(userId, selectedPlan, effectiveFullName,
-      // Use the effective full name
-      customerEmail, enhancedContractData);
+
+      const result = await processSignedContract(
+        userId, 
+        selectedPlan, 
+        effectiveFullName,
+        customerEmail, 
+        enhancedContractData
+      );
+
       if (result) {
         console.log('Contract processed successfully:', result);
         const contractIdToUse = typeof result === 'string' ? result : enhancedContractData.tempContractId || 'processed';
         onComplete(contractIdToUse);
       } else {
         console.error('Failed to process contract');
+        setLastError('שגיאה בעיבוד החוזה. יש לנסות שוב.');
         toast.error('שגיאה בעיבוד החוזה. אנא נסה שוב.');
       }
     } catch (error) {
       console.error('Exception processing contract:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setLastError(`שגיאה בעיבוד החוזה: ${errorMessage}`);
       toast.error(`שגיאה בעיבוד החוזה: ${errorMessage}`);
     }
   };
 
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    setLastError(null);
+    
+    // Wait a moment and then trigger a page refresh to reset state
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  };
+
   // If no fullName available, show error
   if (!effectiveFullName) {
-    return <div className="space-y-6">
+    return (
+      <div className="space-y-6">
         <div className="text-center py-8">
           <h3 className="text-lg font-semibold text-red-600 mb-2">
             חסר שם מלא
@@ -183,16 +208,46 @@ const ContractView: React.FC<ContractViewProps> = ({
           <p className="text-muted-foreground mb-4">
             לא ניתן להמשיך בחתימת החוזה ללא שם מלא. אנא חזור ומלא את הפרטים הנדרשים.
           </p>
-          <button onClick={onBack} className="btn btn-primary">
+          <Button onClick={onBack} className="btn btn-primary">
             חזור למילוי פרטים
-          </button>
+          </Button>
         </div>
-      </div>;
+      </div>
+    );
   }
-  return <div className="space-y-6">
+
+  return (
+    <div className="space-y-6">
+      {lastError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>{lastError}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="mr-2"
+            >
+              {isRetrying ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                'נסה שוב'
+              )}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       
-      
-      <ContractSection selectedPlan={selectedPlan} fullName={effectiveFullName} onSign={handleContractSign} onBack={onBack} />
-    </div>;
+      <ContractSection 
+        selectedPlan={selectedPlan} 
+        fullName={effectiveFullName} 
+        onSign={handleContractSign} 
+        onBack={onBack} 
+      />
+    </div>
+  );
 };
+
 export default ContractView;

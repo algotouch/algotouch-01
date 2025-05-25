@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -13,7 +12,7 @@ export async function callIzidocSignFunction(
   contractData: any
 ): Promise<{ success: boolean; data?: any; error?: any }> {
   try {
-    console.log('storage-service: Calling izidoc-sign edge function:', {
+    console.log('storage-service: Starting izidoc-sign function call with:', {
       userId, 
       planId, 
       email,
@@ -44,7 +43,7 @@ export async function callIzidocSignFunction(
     }
     
     const requestBody = {
-      userId: userId || crypto.randomUUID(), // Generate temp ID if no userId
+      userId: userId || crypto.randomUUID(),
       planId,
       fullName,
       email,
@@ -62,22 +61,75 @@ export async function callIzidocSignFunction(
       }
     };
 
-    console.log('storage-service: Invoking edge function with body keys:', Object.keys(requestBody));
+    console.log('storage-service: Request body prepared, invoking edge function...');
 
     const { data, error } = await supabase.functions.invoke('izidoc-sign', {
       body: requestBody,
     });
 
+    console.log('storage-service: Edge function response received:', {
+      hasData: !!data,
+      hasError: !!error,
+      errorDetails: error
+    });
+
     if (error) {
-      console.error('storage-service: Error from izidoc-sign edge function:', error);
+      console.error('storage-service: Edge function returned error:', error);
+      
+      // Handle different types of errors
+      if (error.message?.includes('non-2xx')) {
+        console.error('storage-service: Non-2xx status code from edge function');
+        return { 
+          success: false, 
+          error: {
+            error: 'Server error during contract processing',
+            details: 'The contract signing service is temporarily unavailable. Please try again.',
+            originalError: error
+          }
+        };
+      }
+      
       return { success: false, error };
     }
 
-    console.log('storage-service: Contract processed successfully by izidoc-sign:', data);
+    if (!data) {
+      console.error('storage-service: Edge function returned no data');
+      return { 
+        success: false, 
+        error: {
+          error: 'No response from contract service',
+          details: 'The contract signing completed but no confirmation was received.'
+        }
+      };
+    }
+
+    console.log('storage-service: Contract processed successfully:', data);
     return { success: true, data };
+    
   } catch (error) {
     console.error('storage-service: Exception calling izidoc-sign function:', error);
-    return { success: false, error };
+    
+    // Enhanced error message for network issues
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      return { 
+        success: false, 
+        error: {
+          error: 'Network error',
+          details: 'Unable to reach the contract signing service. Please check your connection and try again.',
+          originalError: error
+        }
+      };
+    }
+    
+    return { 
+      success: false, 
+      error: {
+        error: 'Contract processing failed',
+        details: errorMessage,
+        originalError: error
+      }
+    };
   }
 }
 

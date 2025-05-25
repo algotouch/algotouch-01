@@ -18,10 +18,16 @@ serve(async (req) => {
   }
 
   try {
-    console.log('izidoc-sign: Request received, parsing body...');
+    console.log('izidoc-sign: Request received, method:', req.method);
+    console.log('izidoc-sign: Environment check:', {
+      hasSupabaseUrl: !!Deno.env.get('SUPABASE_URL'),
+      hasServiceRoleKey: !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      hasSmtpHost: !!Deno.env.get('SMTP_HOST'),
+      hasSmtpUser: !!Deno.env.get('SMTP_USER')
+    });
     
     const requestBody = await req.json();
-    console.log('izidoc-sign: Request body keys:', Object.keys(requestBody));
+    console.log('izidoc-sign: Request body parsed, keys:', Object.keys(requestBody));
     
     const contractData: ContractSignRequest = requestBody;
 
@@ -39,7 +45,7 @@ serve(async (req) => {
     // Validate required inputs
     const validation = validateRequest(contractData);
     if (!validation.isValid) {
-      console.error('izidoc-sign: Missing required fields:', validation.missingFields);
+      console.error('izidoc-sign: Validation failed:', validation.missingFields);
       return new Response(
         JSON.stringify({
           success: false,
@@ -58,14 +64,16 @@ serve(async (req) => {
     console.log('izidoc-sign: Generated contract ID:', contractId);
 
     // Upload contract to storage
+    console.log('izidoc-sign: Starting contract upload to storage...');
     const pdfUrl = await uploadContractToStorage(contractId, contractData.contractHtml);
+    console.log('izidoc-sign: Storage upload completed, has URL:', !!pdfUrl);
 
     // Store contract signature in database
     console.log('izidoc-sign: Saving contract to database...');
     const { data, error } = await saveContractSignature(contractId, contractData, pdfUrl);
 
     if (error) {
-      console.error('izidoc-sign: Error saving contract signature:', error);
+      console.error('izidoc-sign: Database error:', error);
       return new Response(
         JSON.stringify({
           success: false,
@@ -92,9 +100,12 @@ serve(async (req) => {
       data.created_at
     );
 
-    if (emailResult.success) {
-      console.log('izidoc-sign: Contract email sent successfully');
-    } else {
+    console.log('izidoc-sign: Email sending completed:', {
+      success: emailResult.success,
+      hasError: !!emailResult.error
+    });
+
+    if (!emailResult.success) {
       console.error('izidoc-sign: Failed to send contract email:', emailResult.error);
       
       // Log the email failure for later retry
@@ -128,13 +139,19 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("izidoc-sign: Error in function:", error);
+    console.error("izidoc-sign: Critical error in function:", error);
+    console.error("izidoc-sign: Error stack:", error.stack);
     
+    // Return detailed error information
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message || 'Unknown error occurred',
-        details: error.stack
+        details: {
+          stack: error.stack,
+          name: error.name,
+          type: typeof error
+        }
       }),
       {
         status: 500,
