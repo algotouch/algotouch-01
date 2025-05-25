@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SignupFormProps {
   onSignupSuccess?: () => void;
@@ -16,7 +17,7 @@ interface SignupFormProps {
 
 const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
   const navigate = useNavigate();
-  const { updateRegistrationData, startRegistering } = useUnifiedRegistrationData();
+  const { updateRegistrationData, startRegistering, clearRegistrationData } = useUnifiedRegistrationData();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,6 +64,36 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const checkIfUserExists = async (email: string): Promise<boolean> => {
+    try {
+      // Try to sign up with the email to see if user already exists
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: 'dummy_password_for_check'
+      });
+      
+      // If we get a user_repeated_signup error or similar, user exists
+      if (error) {
+        if (error.message.includes('User already registered') || 
+            error.message.includes('already exists') ||
+            error.message.includes('user_repeated_signup') ||
+            error.message.includes('already been registered')) {
+          return true;
+        }
+        // For other errors, we can't determine, so assume user doesn't exist
+        console.log('Unexpected error during user check:', error);
+        return false;
+      }
+      
+      // If signup succeeded but user is null, it might be a pending confirmation
+      // In this case, user likely exists but hasn't confirmed email
+      return false;
+    } catch (error) {
+      console.error('Error checking if user exists:', error);
+      return false;
+    }
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowExistingUserError(false);
@@ -75,7 +106,17 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       setSigningUp(true);
       console.log('Starting registration process for:', email);
       
+      // First check if user already exists
+      const userExists = await checkIfUserExists(email);
+      if (userExists) {
+        console.log('User already exists:', email);
+        setShowExistingUserError(true);
+        toast.error('המשתמש כבר קיים במערכת');
+        return;
+      }
+      
       // Clear any previous registration data
+      clearRegistrationData();
       sessionStorage.removeItem('registration_data');
       
       // Save registration data to session storage and unified hook
@@ -93,12 +134,12 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       // Store in session storage
       sessionStorage.setItem('registration_data', JSON.stringify(registrationData));
       
-      // Update unified registration data
+      // Update unified registration data and start the flow
       updateRegistrationData(registrationData);
       startRegistering();
       
       console.log('Registration data saved, navigating to subscription page');
-      toast.success('הפרטים נשמרו בהצלחה');
+      toast.success('הפרטים נשמרו בהצלחה - אנא בחר תכנית מנוי');
       
       // Navigate to subscription page to start the flow
       navigate('/subscription', { replace: true });
@@ -237,7 +278,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={signingUp}>
-            {signingUp ? 'שומר פרטים...' : 'המשך לבחירת תכנית'}
+            {signingUp ? 'בודק נתונים...' : 'המשך לבחירת תכנית'}
           </Button>
         </CardFooter>
       </form>
