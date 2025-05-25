@@ -31,7 +31,7 @@ export function DirectionProvider({
     setMounted(true);
   }, []);
   
-  // Use a simple value until mounted to avoid useMemo issues
+  // Use a simple value until mounted - no useMemo here
   if (!mounted) {
     return (
       <DirectionContext.Provider value={{ dir }}>
@@ -40,6 +40,14 @@ export function DirectionProvider({
     );
   }
   
+  return <DirectionProviderMounted dir={dir}>{children}</DirectionProviderMounted>;
+}
+
+const DirectionProviderMounted: React.FC<{ dir: Direction; children: React.ReactNode }> = ({
+  dir,
+  children,
+}) => {
+  // Now we can safely use useMemo since the component is mounted
   const value = useMemo(() => ({ dir }), [dir]);
   
   return (
@@ -47,4 +55,4 @@ export function DirectionProvider({
       {children}
     </DirectionContext.Provider>
   );
-}
+};
