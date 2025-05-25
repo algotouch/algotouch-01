@@ -35,35 +35,8 @@ const SubscriptionContent = () => {
     console.log('SubscriptionContent: Handling back to auth');
     clearRegistrationData();
     sessionStorage.removeItem('registration_data');
-    // Clear redirect counters
-    Object.keys(sessionStorage).forEach(key => {
-      if (key.startsWith('redirect_count_')) {
-        sessionStorage.removeItem(key);
-      }
-    });
     navigate('/auth?tab=signup', { replace: true });
   };
-
-  // Check for URL parameters that indicate we were forced here
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const forced = urlParams.get('forced');
-    const reason = urlParams.get('reason');
-    
-    if (forced === 'true' && !hasShownError) {
-      setHasShownError(true);
-      toast.error('זוהתה בעיה בניתוב. אנא התחל מחדש.');
-      setTimeout(() => {
-        handleBackToAuth();
-      }, 2000);
-      return;
-    }
-    
-    if (reason === 'subscription' && !registrationData && !isAuthenticated && !hasShownError) {
-      setHasShownError(true);
-      toast.info('אנא השלם את תהליך ההרשמה תחילה');
-    }
-  }, [location.search, registrationData, isAuthenticated, hasShownError]);
 
   // Handle users with active subscription
   useEffect(() => {
@@ -74,23 +47,6 @@ const SubscriptionContent = () => {
       return;
     }
   }, [hasActiveSubscription, isAuthenticated, navigate]);
-
-  // Validation logic - but don't redirect immediately to prevent loops
-  useEffect(() => {
-    if (!isLoading && !hasActiveSubscription) {
-      // If no registration data and not authenticated, show error but don't redirect immediately
-      if (!registrationData && !isAuthenticated && !hasShownError) {
-        console.log('SubscriptionContent: Missing registration data and not authenticated');
-        setHasShownError(true);
-        toast.error('נתוני הרשמה חסרים. אנא התחל תהליך הרשמה מחדש.');
-        
-        // Delay redirect to prevent immediate loop
-        setTimeout(() => {
-          handleBackToAuth();
-        }, 3000);
-      }
-    }
-  }, [isLoading, registrationData, isAuthenticated, hasActiveSubscription, hasShownError]);
 
   // Show loading state
   if (isLoading) {
@@ -104,8 +60,17 @@ const SubscriptionContent = () => {
     );
   }
 
-  // Show error state if we have shown an error
-  if (hasShownError && !registrationData && !isAuthenticated) {
+  // Show error state only if we really don't have any valid data
+  if (!isAuthenticated && !registrationData && !hasShownError) {
+    console.log('SubscriptionContent: No valid auth state, showing error');
+    setHasShownError(true);
+    toast.error('נתוני הרשמה חסרים. אנא התחל תהליך הרשמה מחדש.');
+    
+    // Don't redirect immediately - let user see the message
+    setTimeout(() => {
+      handleBackToAuth();
+    }, 3000);
+    
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
         <div className="text-center space-y-4">

@@ -24,30 +24,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   } = useAuth();
   
   const location = useLocation();
-  const [redirectCount, setRedirectCount] = useState(0);
-  
-  // Circuit breaker to prevent infinite redirects
-  useEffect(() => {
-    const currentPath = location.pathname;
-    const redirectKey = `redirect_count_${currentPath}`;
-    const count = parseInt(sessionStorage.getItem(redirectKey) || '0');
-    
-    if (count > 3) {
-      console.error('Too many redirects detected, clearing session data');
-      sessionStorage.clear();
-      localStorage.clear();
-      window.location.href = '/auth?tab=signup&reset=true';
-      return;
-    }
-    
-    setRedirectCount(count);
-    sessionStorage.setItem(redirectKey, (count + 1).toString());
-    
-    // Clear redirect count after 30 seconds
-    setTimeout(() => {
-      sessionStorage.removeItem(redirectKey);
-    }, 30000);
-  }, [location.pathname]);
   
   // Show loading while auth is initializing
   if (!initialized || loading) {
@@ -71,20 +47,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <>{children}</>;
   }
 
-  // Special handling for subscription page
+  // Special handling for subscription page - simplified logic
   if (location.pathname === '/subscription' || location.pathname.startsWith('/subscription/')) {
     console.log('ProtectedRoute: Subscription page access check', {
       isAuthenticated,
       hasRegistrationData: !!registrationData,
-      pendingSubscription,
-      redirectCount
+      pendingSubscription
     });
-    
-    // Prevent redirect loops - if we've been here too many times, force to auth
-    if (redirectCount > 2) {
-      console.log('ProtectedRoute: Too many subscription redirects, forcing to auth');
-      return <Navigate to="/auth?tab=signup&forced=true" replace />;
-    }
     
     // Allow access if user is authenticated OR has valid registration data
     if (isAuthenticated || (registrationData && pendingSubscription)) {

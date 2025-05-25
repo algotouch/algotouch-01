@@ -73,7 +73,9 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
           }
         });
         
-        navigate('/subscription', { replace: true });
+        // Force navigation to subscription page - remove replace: true to ensure proper navigation
+        console.log('SignupForm: Forcing navigation to /subscription');
+        navigate('/subscription');
         
         if (onSignupSuccess) {
           onSignupSuccess();
@@ -81,6 +83,8 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess, onSwitchToLogi
       } else if (result.userExists) {
         setShowExistingUserError(true);
       }
+    } catch (error) {
+      console.error('SignupForm: Error during signup:', error);
     } finally {
       setSigningUp(false);
     }
