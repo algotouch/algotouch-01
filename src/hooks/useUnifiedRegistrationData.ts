@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { RegistrationData } from '@/types/payment';
 
@@ -27,8 +28,12 @@ export const useUnifiedRegistrationData = () => {
             setCurrentStep('payment');
           } else if (data.planId) {
             setCurrentStep('contract');
-          } else {
+          } else if (data.email && data.userData) {
+            // If we have user data but no plan, go to plan selection
             setCurrentStep('plan_selection');
+            setPendingSubscription(true);
+          } else {
+            setCurrentStep('signup');
           }
         }
         
@@ -78,6 +83,7 @@ export const useUnifiedRegistrationData = () => {
 
   const startRegistering = () => {
     setIsRegistering(true);
+    setPendingSubscription(true);
   };
 
   const stopRegistering = () => {

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -5,7 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/auth';
+import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 interface SignupFormProps {
   onSignupSuccess?: () => void;
@@ -13,11 +16,7 @@ interface SignupFormProps {
 
 const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
   const navigate = useNavigate();
-  const { 
-    signUp,
-    setRegistrationData,
-    setPendingSubscription
-  } = useAuth();
+  const { updateRegistrationData, startRegistering } = useUnifiedRegistrationData();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,6 +26,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
   const [phone, setPhone] = useState('');
   const [signingUp, setSigningUp] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [showExistingUserError, setShowExistingUserError] = useState(false);
 
   const validateInputs = () => {
     const newErrors: {[key: string]: string} = {};
@@ -65,6 +65,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowExistingUserError(false);
     
     if (!validateInputs()) {
       return;
@@ -74,46 +75,59 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       setSigningUp(true);
       console.log('Starting registration process for:', email);
       
-      // Use auth context to sign up - Fix by providing email and password as string arguments
-      const { success, error } = await signUp(email, password, {
-        firstName,
-        lastName,
-        phone
-      });
+      // Clear any previous registration data
+      sessionStorage.removeItem('registration_data');
       
-      if (!success) {
-        throw error || new Error('Registration failed');
-      }
-      
-      // Store registration data in auth context
-      setRegistrationData({
+      // Save registration data to session storage and unified hook
+      const registrationData = {
         email,
         password,
         userData: {
           firstName,
           lastName,
           phone
-        }
-      });
+        },
+        registrationTime: new Date().toISOString()
+      };
       
-      // Set pending subscription flag
-      setPendingSubscription(true);
+      // Store in session storage
+      sessionStorage.setItem('registration_data', JSON.stringify(registrationData));
       
-      console.log('Registration data saved to context');
+      // Update unified registration data
+      updateRegistrationData(registrationData);
+      startRegistering();
+      
+      console.log('Registration data saved, navigating to subscription page');
       toast.success('הפרטים נשמרו בהצלחה');
       
-      // Navigate directly to subscription page
-      navigate('/subscription', { replace: true, state: { isRegistering: true } });
+      // Navigate to subscription page to start the flow
+      navigate('/subscription', { replace: true });
       
       if (onSignupSuccess) {
         onSignupSuccess();
       }
     } catch (error: any) {
-      console.error('Signup validation error:', error);
-      toast.error(error.message || 'אירעה שגיאה בתהליך ההרשמה');
+      console.error('Signup error:', error);
+      
+      // Check if it's a user already exists error
+      if (error.message?.includes('User already registered') || 
+          error.message?.includes('already exists') ||
+          error.message?.includes('user_repeated_signup')) {
+        setShowExistingUserError(true);
+        toast.error('המשתמש כבר קיים במערכת');
+      } else {
+        toast.error(error.message || 'אירעה שגיאה בתהליך ההרשמה');
+      }
     } finally {
       setSigningUp(false);
     }
+  };
+
+  const handleLoginRedirect = () => {
+    // Switch to login tab
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('tab', 'login');
+    navigate(currentUrl.pathname + currentUrl.search, { replace: true });
   };
 
   return (
@@ -124,6 +138,22 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
       </CardHeader>
       <form onSubmit={handleSignup}>
         <CardContent className="space-y-4">
+          {showExistingUserError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                המשתמש עם כתובת המייל הזו כבר רשום במערכת.
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto font-normal underline mr-1"
+                  onClick={handleLoginRedirect}
+                >
+                  לחץ כאן להתחברות
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="last-name">שם משפחה</Label>
@@ -207,7 +237,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onSignupSuccess }) => {
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={signingUp}>
-            {signingUp ? 'בודק פרטים...' : 'המשך לבחירת תכנית'}
+            {signingUp ? 'שומר פרטים...' : 'המשך לבחירת תכנית'}
           </Button>
         </CardFooter>
       </form>
