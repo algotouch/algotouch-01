@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import SubscriptionSteps from '@/components/subscription/SubscriptionSteps';
 import { useSubscriptionFlow } from './hooks/useSubscriptionFlow';
 import SubscriptionView from './views/SubscriptionView';
@@ -14,6 +13,7 @@ const SubscriptionContent = () => {
   const { hasActiveSubscription, isCheckingSubscription } = useSubscriptionContext();
   const { isAuthenticated } = useAuth();
   const { registrationData, clearRegistrationData, isLoading: regDataLoading } = useUnifiedRegistrationData();
+  const navigate = useNavigate();
   const {
     currentStep,
     selectedPlan,
@@ -31,6 +31,15 @@ const SubscriptionContent = () => {
   const [shouldRedirectToMySubscription, setShouldRedirectToMySubscription] = useState(false);
 
   const isLoading = regDataLoading || flowLoading || isCheckingSubscription;
+
+  // Handle back to auth functionality
+  const handleBackToAuth = () => {
+    console.log('SubscriptionContent: Handling back to auth, clearing registration data');
+    clearRegistrationData();
+    sessionStorage.removeItem('registration_data');
+    toast.info('נתוני ההרשמה נמחקו');
+    navigate('/auth?tab=signup', { replace: true });
+  };
 
   // Clear registration data if the user already has an active subscription
   useEffect(() => {
@@ -136,6 +145,7 @@ const SubscriptionContent = () => {
         onContractSign={handleContractSign}
         onPaymentComplete={handlePaymentComplete}
         onBack={handleBackToStep}
+        onBackToAuth={handleBackToAuth}
       />
     </div>
   );

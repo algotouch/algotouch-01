@@ -14,6 +14,7 @@ interface SubscriptionViewProps {
   onContractSign: (contractId: string) => void;
   onPaymentComplete: () => void;
   onBack: (step: Steps) => void;
+  onBackToAuth?: () => void;
 }
 
 const SubscriptionView: React.FC<SubscriptionViewProps> = ({
@@ -24,6 +25,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   onContractSign,
   onPaymentComplete,
   onBack,
+  onBackToAuth,
 }) => {
   switch (currentStep) {
     case 'plan-selection':
@@ -31,6 +33,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         <PlanSelectionView 
           onPlanSelect={onPlanSelect}
           selectedPlan={selectedPlan}
+          onBackToAuth={onBackToAuth}
         />
       );
     case 'contract':
@@ -58,6 +61,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       return <PlanSelectionView 
         onPlanSelect={onPlanSelect}
         selectedPlan={selectedPlan}
+        onBackToAuth={onBackToAuth}
       />;
   }
 };
