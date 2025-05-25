@@ -45,14 +45,8 @@ export const getSubscriptionPlans = (): Record<string, SubscriptionPlan> => {
   };
 };
 
-// Updated TokenData interface with an index signature to make it compatible with Json type
-export interface TokenData {
-  lastFourDigits: string;
-  expiryMonth: string;
-  expiryYear: string;
-  cardholderName: string;
-  [key: string]: string | number | boolean | null | TokenData[] | undefined; // Adding index signature for Json compatibility
-}
+// Import TokenData from types instead of defining it here
+import { TokenData } from '@/types/payment';
 
 export const createTokenData = (cardNumber: string, expiryDate: string, cardholderName: string): TokenData => {
   return {

@@ -2,8 +2,61 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export const useReputationActions = () => {
+export const useReputationActions = (userId?: string) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [userPoints, setUserPoints] = useState(0);
+  const [userLevel, setUserLevel] = useState(1);
+
+  const updateReputationData = async () => {
+    if (!userId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('community_reputation')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setUserPoints(data.points);
+        setUserLevel(data.level);
+      }
+    } catch (error) {
+      console.error('Error fetching reputation data:', error);
+    }
+  };
+
+  const checkAndAwardDailyLogin = async () => {
+    if (!userId) return;
+    
+    try {
+      const today = new Date().toDateString();
+      
+      // Check if user already logged in today
+      const { data: todayActivity, error: activityError } = await supabase
+        .from('community_activities')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('activity_type', 'DAILY_LOGIN')
+        .gte('created_at', new Date().toISOString().split('T')[0])
+        .maybeSingle();
+
+      if (activityError && activityError.code !== 'PGRST116') {
+        throw activityError;
+      }
+
+      if (!todayActivity) {
+        // Award daily login points
+        await incrementUserPoints(userId, 2, 'DAILY_LOGIN');
+      }
+    } catch (error) {
+      console.error('Error checking daily login:', error);
+    }
+  };
 
   const incrementUserPoints = async (userId: string, points: number, activityType: string) => {
     setIsLoading(true);
@@ -34,6 +87,9 @@ export const useReputationActions = () => {
           .eq('user_id', userId);
 
         if (updateError) throw updateError;
+        
+        setUserPoints(newPoints);
+        setUserLevel(newLevel);
       } else {
         // Create new reputation record
         const { error: insertError } = await supabase
@@ -45,6 +101,9 @@ export const useReputationActions = () => {
           });
 
         if (insertError) throw insertError;
+        
+        setUserPoints(points);
+        setUserLevel(1);
       }
 
       // Log the activity
@@ -71,6 +130,10 @@ export const useReputationActions = () => {
 
   return {
     incrementUserPoints,
-    isLoading
+    isLoading,
+    userPoints,
+    userLevel,
+    checkAndAwardDailyLogin,
+    updateReputationData
   };
 };

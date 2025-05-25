@@ -57,13 +57,12 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
   }, []);
 
   const handlePaymentProcessing = async (tokenData: TokenData) => {
-    // Define operationTypeValue at the beginning of the function to ensure it's available throughout
-    let operationTypeValue = 3; // Default: token creation only (for monthly subscription with free trial)
+    let operationTypeValue = 3;
     
     if (planId === 'annual') {
-      operationTypeValue = 2; // Charge and create token for recurring annual payments
+      operationTypeValue = 2;
     } else if (planId === 'vip') {
-      operationTypeValue = 1; // Charge only - one-time payment
+      operationTypeValue = 1;
     }
     
     try {
@@ -76,7 +75,7 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
         const updatedData = {
           ...registrationData,
           paymentToken: {
-            token: tokenData.token || tokenData.lastFourDigits,
+            token: String(tokenData.token || tokenData.lastFourDigits), // Convert to string
             expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
             last4Digits: tokenData.lastFourDigits,
             cardholderName: tokenData.cardholderName
@@ -97,7 +96,7 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
         const minimalRegData = {
           planId,
           paymentToken: {
-            token: tokenData.token || tokenData.lastFourDigits,
+            token: String(tokenData.token || tokenData.lastFourDigits), // Convert to string
             expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
             last4Digits: tokenData.lastFourDigits,
             cardholderName: tokenData.cardholderName
@@ -165,13 +164,12 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
   };
 
   const handleExternalPayment = async () => {
-    // Define operationTypeValue at the beginning of this function for its scope
-    let operationTypeValue = 3; // Default: token creation only
+    let operationTypeValue = 3;
     
     if (planId === 'annual') {
-      operationTypeValue = 2; // Charge and create token for recurring payments
+      operationTypeValue = 2;
     } else if (planId === 'vip') {
-      operationTypeValue = 1; // Charge only - one-time payment
+      operationTypeValue = 1;
     }
     
     setIsProcessing(true);

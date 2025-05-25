@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import PaymentDetails from './PaymentDetails';
 import PlanSummary from './PlanSummary';
 import SecurityNote from './SecurityNote';
-import { getSubscriptionPlans, createTokenData } from './utils/paymentHelpers';
+import { getSubscriptionPlans } from './utils/paymentHelpers';
+import { createTokenData } from './utils/paymentHelpers';
 import { registerUser } from '@/services/registration/registerUser';
 import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -37,7 +39,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
   } = useUnifiedRegistrationData();
 
   useEffect(() => {
-    // If there's no registration data or it's still loading, wait
     if (isLoading) return;
     
     if (!registrationData) {
@@ -46,12 +47,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       return;
     }
     
-    // Auto-fill cardholder name if available
     if (registrationData.userData?.firstName && registrationData.userData?.lastName && !cardholderName) {
       setCardholderName(`${registrationData.userData.firstName} ${registrationData.userData.lastName}`);
     }
     
-    // Check for previous registration ID
     const storedRegId = localStorage.getItem('temp_registration_id');
     if (storedRegId) {
       setRegistrationId(storedRegId);
@@ -80,10 +79,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       
       const tokenData = createTokenData(cardNumber, expiryDate, cardholderName);
       
-      // Update registration data with token information - Cast to string to fix type error
+      // Update registration data with token information - ensure token is a string
       updateRegistrationData({
         paymentToken: {
-          token: tokenData.token?.toString(),
+          token: String(tokenData.token || `sim_${Date.now()}`), // Ensure it's a string
           last4Digits: tokenData.lastFourDigits,
           expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
           cardholderName: tokenData.cardholderName
@@ -99,7 +98,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
         throw result.error;
       }
       
-      // Store the registration ID for verification purposes
       if (result.registrationId) {
         localStorage.setItem('temp_registration_id', result.registrationId);
         setRegistrationId(result.registrationId);
@@ -107,7 +105,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
       
       toast.success('התשלום נקלט בהצלחה! נרשמת לתקופת ניסיון חינם');
       
-      // Only clear registration data after successful payment completion
       clearRegistrationData();
       
       onPaymentComplete();
@@ -120,7 +117,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) 
     }
   };
 
-  // Handle registration data errors
   if (registrationError) {
     return (
       <Card className="max-w-lg mx-auto">
