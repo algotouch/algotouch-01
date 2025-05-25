@@ -172,6 +172,102 @@ serve(async (req) => {
     }
 
     console.log('izidoc-sign: Contract signature saved successfully:', data);
+
+    // Send contract email via SMTP
+    try {
+      console.log('izidoc-sign: Sending contract email via SMTP...');
+      
+      // Convert contract HTML to base64 for attachment
+      const encoder = new TextEncoder();
+      const contractBytes = encoder.encode(contractHtml);
+      const contractBase64 = btoa(String.fromCharCode(...new Uint8Array(contractBytes)));
+
+      // Customer email template
+      const customerEmailHtml = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="he">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>אישור חתימת חוזה</title>
+          <style>
+            body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .header { text-align: center; margin-bottom: 30px; }
+            .logo { font-size: 24px; font-weight: bold; color: #2563eb; margin-bottom: 10px; }
+            .content { line-height: 1.6; color: #333; }
+            .highlight { background-color: #e0f2fe; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">AlgoTouch</div>
+              <h1>אישור חתימת חוזה</h1>
+            </div>
+            
+            <div class="content">
+              <p>שלום ${fullName},</p>
+              
+              <p>תודה שבחרת ב-AlgoTouch! אנו שמחים לאשר שחתמת בהצלחה על החוזה עבור תכנית ${planId}.</p>
+              
+              <div class="highlight">
+                <strong>פרטי החוזה:</strong><br>
+                מזהה חוזה: ${contractId}<br>
+                תאריך חתימה: ${new Date(data.created_at).toLocaleDateString('he-IL')}<br>
+                תכנית: ${planId}
+              </div>
+              
+              <p>החוזה החתום נשמר במערכת שלנו וניתן לצפות בו בכל עת דרך האזור האישי שלך.</p>
+              
+              <p>אם יש לך שאלות או צריך עזרה, אנא פנה אלינו:</p>
+              <ul>
+                <li>מייל: support@algotouch.co.il</li>
+              </ul>
+              
+              <p>בברכה,<br>צוות AlgoTouch</p>
+            </div>
+            
+            <div class="footer">
+              <p>מייל זה נשלח אוטומטית ממערכת AlgoTouch. אנא אל תשיב למייל זה.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Send email via SMTP edge function
+      const emailResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/smtp-sender`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
+        body: JSON.stringify({
+          to: email,
+          subject: 'אישור חתימת חוזה - AlgoTouch',
+          html: customerEmailHtml,
+          attachmentData: [{
+            filename: `contract-${fullName.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0,10)}.html`,
+            content: contractBase64,
+            mimeType: "text/html"
+          }]
+        }),
+      });
+
+      const emailResult = await emailResponse.json();
+      
+      if (emailResult.success) {
+        console.log('izidoc-sign: Contract email sent successfully to customer');
+      } else {
+        console.warn('izidoc-sign: Failed to send customer email:', emailResult.error);
+      }
+    } catch (emailError) {
+      console.warn('izidoc-sign: Error sending contract email:', emailError);
+      // Continue without failing the contract signing process
+    }
+
     console.log('izidoc-sign: Contract processing completed successfully');
 
     // Return success immediately - don't wait for emails
