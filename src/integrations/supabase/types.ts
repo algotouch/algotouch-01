@@ -240,7 +240,7 @@ export type Database = {
           signature: string
           updated_at: string
           user_agent: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           address?: string | null
@@ -262,7 +262,7 @@ export type Database = {
           signature: string
           updated_at?: string
           user_agent?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           address?: string | null
@@ -284,7 +284,7 @@ export type Database = {
           signature?: string
           updated_at?: string
           user_agent?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }

@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -24,9 +25,8 @@ export async function callIzidocSignFunction(
     });
     
     // Validate all required fields before calling the function
-    if (!userId || !planId || !fullName || !email || !contractData?.signature || !contractData?.contractHtml) {
+    if (!planId || !fullName || !email || !contractData?.signature || !contractData?.contractHtml) {
       const missingFields = {
-        hasUserId: !!userId,
         hasPlanId: !!planId,
         hasFullName: !!fullName,
         hasEmail: !!email,
@@ -44,7 +44,7 @@ export async function callIzidocSignFunction(
     }
     
     const requestBody = {
-      userId,
+      userId: userId || crypto.randomUUID(), // Generate temp ID if no userId
       planId,
       fullName,
       email,

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import DigitalContractForm from '@/components/DigitalContractForm';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, User } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth';
 
@@ -40,11 +40,10 @@ const ContractSection: React.FC<ContractSectionProps> = ({
         hasSignature: !!contractData.signature,
         hasContractHtml: !!contractData.contractHtml,
         fullName,
-        selectedPlan
+        selectedPlan,
+        hasUser: !!user?.id,
+        hasRegistrationData: !!registrationData
       });
-
-      // Add a small delay to show the processing state
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Pass the contract data directly to the parent along with user information
       onSign({
@@ -77,7 +76,7 @@ const ContractSection: React.FC<ContractSectionProps> = ({
         
         {isProcessing && (
           <div className="flex items-center text-sm text-muted-foreground">
-            מעבד את החתימה...
+            שומר חוזה...
           </div>
         )}
       </div>

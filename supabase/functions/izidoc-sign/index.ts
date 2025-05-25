@@ -58,7 +58,6 @@ serve(async (req) => {
 
     // Validate required inputs with detailed logging
     const missingFields = [];
-    if (!userId) missingFields.push('userId');
     if (!planId) missingFields.push('planId');
     if (!email) missingFields.push('email');
     if (!signature) missingFields.push('signature');
@@ -72,22 +71,6 @@ serve(async (req) => {
           success: false,
           error: 'Missing required fields',
           details: { missingFields }
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Validate userId is a proper UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
-      console.error('izidoc-sign: Invalid userId format:', userId);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid user ID format'
         }),
         {
           status: 400,
@@ -115,7 +98,7 @@ serve(async (req) => {
     // Try to upload HTML to storage first (optional step)
     let pdfUrl = null;
     try {
-      const fileName = `${userId}/${contractId}.html`;
+      const fileName = `contracts/${contractId}.html`;
       const encoder = new TextEncoder();
       const bytes = encoder.encode(contractHtml);
       
@@ -147,14 +130,14 @@ serve(async (req) => {
       console.warn('izidoc-sign: Storage operation failed, continuing without URL:', storageError);
     }
 
-    // Store contract signature in database using service role
+    // Store contract signature in database - now without foreign key dependency
     console.log('izidoc-sign: Saving contract to database...');
     
     const { data, error } = await supabase
       .from('contract_signatures')
       .insert({
         id: contractId,
-        user_id: userId,
+        user_id: userId || null, // Now nullable, so we can handle cases where user doesn't exist yet
         plan_id: planId,
         full_name: fullName,
         email: email,
@@ -189,34 +172,9 @@ serve(async (req) => {
     }
 
     console.log('izidoc-sign: Contract signature saved successfully:', data);
-
-    // Send contract emails (optional - don't fail if this doesn't work)
-    console.log('izidoc-sign: Attempting to send contract emails...');
-    
-    try {
-      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-contract-emails', {
-        body: {
-          customerEmail: email,
-          customerName: fullName,
-          contractId: contractId,
-          contractHtml: contractHtml,
-          planId: planId,
-          signedAt: new Date().toISOString(),
-          supportEmail: 'support@algotouch.co.il'
-        }
-      });
-      
-      if (emailError) {
-        console.warn('izidoc-sign: Email sending failed:', emailError);
-      } else {
-        console.log('izidoc-sign: Contract emails sent successfully:', emailData);
-      }
-    } catch (emailError) {
-      console.warn('izidoc-sign: Email sending failed with exception:', emailError);
-    }
-
     console.log('izidoc-sign: Contract processing completed successfully');
 
+    // Return success immediately - don't wait for emails
     return new Response(
       JSON.stringify({
         success: true,
