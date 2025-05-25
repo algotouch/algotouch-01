@@ -12,13 +12,15 @@ export async function callIzidocSignFunction(
   contractData: any
 ): Promise<{ success: boolean; data?: any; error?: any }> {
   try {
-    console.log('Calling izidoc-sign edge function:', {
+    console.log('storage-service: Calling izidoc-sign edge function:', {
       userId, 
       planId, 
       email,
       fullName,
       hasSignature: !!contractData.signature,
-      hasContractHtml: !!contractData.contractHtml
+      hasContractHtml: !!contractData.contractHtml,
+      signatureLength: contractData.signature?.length || 0,
+      contractHtmlLength: contractData.contractHtml?.length || 0
     });
     
     // Validate all required fields before calling the function
@@ -31,7 +33,7 @@ export async function callIzidocSignFunction(
         hasSignature: !!contractData?.signature,
         hasContractHtml: !!contractData?.contractHtml
       };
-      console.error('Missing required fields for edge function:', missingFields);
+      console.error('storage-service: Missing required fields for edge function:', missingFields);
       return { 
         success: false, 
         error: { 
@@ -41,36 +43,40 @@ export async function callIzidocSignFunction(
       };
     }
     
+    const requestBody = {
+      userId,
+      planId,
+      fullName,
+      email,
+      signature: contractData.signature,
+      contractHtml: contractData.contractHtml,
+      agreedToTerms: contractData.agreedToTerms || false,
+      agreedToPrivacy: contractData.agreedToPrivacy || false,
+      contractVersion: contractData.contractVersion || "1.0",
+      browserInfo: contractData.browserInfo || {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        platform: navigator.platform,
+        screenSize: `${window.innerWidth}x${window.innerHeight}`,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    };
+
+    console.log('storage-service: Invoking edge function with body keys:', Object.keys(requestBody));
+
     const { data, error } = await supabase.functions.invoke('izidoc-sign', {
-      body: {
-        userId,
-        planId,
-        fullName, // Make sure fullName is included
-        email,
-        signature: contractData.signature,
-        contractHtml: contractData.contractHtml,
-        agreedToTerms: contractData.agreedToTerms || false,
-        agreedToPrivacy: contractData.agreedToPrivacy || false,
-        contractVersion: contractData.contractVersion || "1.0",
-        browserInfo: contractData.browserInfo || {
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          platform: navigator.platform,
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        }
-      },
+      body: requestBody,
     });
 
     if (error) {
-      console.error('Error from izidoc-sign edge function:', error);
+      console.error('storage-service: Error from izidoc-sign edge function:', error);
       return { success: false, error };
     }
 
-    console.log('Contract processed successfully by izidoc-sign:', data);
+    console.log('storage-service: Contract processed successfully by izidoc-sign:', data);
     return { success: true, data };
   } catch (error) {
-    console.error('Exception calling izidoc-sign function:', error);
+    console.error('storage-service: Exception calling izidoc-sign function:', error);
     return { success: false, error };
   }
 }

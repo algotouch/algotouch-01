@@ -27,6 +27,11 @@ serve(async (req) => {
   }
 
   try {
+    console.log('izidoc-sign: Request received, parsing body...');
+    
+    const requestBody = await req.json();
+    console.log('izidoc-sign: Request body keys:', Object.keys(requestBody));
+    
     const {
       userId,
       planId,
@@ -38,33 +43,35 @@ serve(async (req) => {
       agreedToPrivacy = false,
       contractVersion = "1.0",
       browserInfo
-    }: ContractSignRequest = await req.json();
+    }: ContractSignRequest = requestBody;
 
-    console.log('Processing contract signing request:', {
+    console.log('izidoc-sign: Processing contract signing request:', {
       userId,
       planId,
       email,
+      fullName,
       hasSignature: !!signature,
       hasContractHtml: !!contractHtml,
-      hasFullName: !!fullName
+      signatureLength: signature?.length || 0,
+      contractHtmlLength: contractHtml?.length || 0
     });
 
-    // Validate required inputs
-    if (!userId || !planId || !email || !signature || !contractHtml || !fullName) {
-      const missingFields = {
-        hasUserId: !!userId,
-        hasPlanId: !!planId,
-        hasEmail: !!email,
-        hasSignature: !!signature,
-        hasContractHtml: !!contractHtml,
-        hasFullName: !!fullName
-      };
-      console.error('Missing required fields:', missingFields);
+    // Validate required inputs with detailed logging
+    const missingFields = [];
+    if (!userId) missingFields.push('userId');
+    if (!planId) missingFields.push('planId');
+    if (!email) missingFields.push('email');
+    if (!signature) missingFields.push('signature');
+    if (!contractHtml) missingFields.push('contractHtml');
+    if (!fullName) missingFields.push('fullName');
+
+    if (missingFields.length > 0) {
+      console.error('izidoc-sign: Missing required fields:', missingFields);
       return new Response(
         JSON.stringify({
           success: false,
           error: 'Missing required fields',
-          details: missingFields
+          details: { missingFields }
         }),
         {
           status: 400,
@@ -76,7 +83,7 @@ serve(async (req) => {
     // Validate userId is a proper UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(userId)) {
-      console.error('Invalid userId format:', userId);
+      console.error('izidoc-sign: Invalid userId format:', userId);
       return new Response(
         JSON.stringify({
           success: false,
@@ -103,7 +110,7 @@ serve(async (req) => {
 
     // Generate a unique contract ID
     const contractId = crypto.randomUUID();
-    console.log('Generated contract ID:', contractId);
+    console.log('izidoc-sign: Generated contract ID:', contractId);
 
     // Try to upload HTML to storage first (optional step)
     let pdfUrl = null;
@@ -111,6 +118,8 @@ serve(async (req) => {
       const fileName = `${userId}/${contractId}.html`;
       const encoder = new TextEncoder();
       const bytes = encoder.encode(contractHtml);
+      
+      console.log('izidoc-sign: Uploading contract to storage:', fileName);
       
       const { data: uploadData, error: uploadError } = await supabase
         .storage
@@ -121,9 +130,9 @@ serve(async (req) => {
         });
       
       if (uploadError) {
-        console.warn('Storage upload failed, continuing without URL:', uploadError);
+        console.warn('izidoc-sign: Storage upload failed, continuing without URL:', uploadError);
       } else {
-        console.log('Contract uploaded to storage:', uploadData?.path);
+        console.log('izidoc-sign: Contract uploaded to storage:', uploadData?.path);
         
         // Create a signed URL
         const { data: urlData } = await supabase
@@ -132,12 +141,15 @@ serve(async (req) => {
           .createSignedUrl(fileName, 60 * 60 * 24 * 30); // 30 days expiry
         
         pdfUrl = urlData?.signedUrl;
+        console.log('izidoc-sign: Created signed URL:', !!pdfUrl);
       }
     } catch (storageError) {
-      console.warn('Storage operation failed, continuing without URL:', storageError);
+      console.warn('izidoc-sign: Storage operation failed, continuing without URL:', storageError);
     }
 
     // Store contract signature in database using service role
+    console.log('izidoc-sign: Saving contract to database...');
+    
     const { data, error } = await supabase
       .from('contract_signatures')
       .insert({
@@ -162,7 +174,7 @@ serve(async (req) => {
       .single();
 
     if (error) {
-      console.error('Error saving contract signature:', error);
+      console.error('izidoc-sign: Error saving contract signature:', error);
       return new Response(
         JSON.stringify({
           success: false,
@@ -176,11 +188,13 @@ serve(async (req) => {
       );
     }
 
-    console.log('Contract signature saved successfully:', data);
+    console.log('izidoc-sign: Contract signature saved successfully:', data);
 
     // Send contract emails (optional - don't fail if this doesn't work)
+    console.log('izidoc-sign: Attempting to send contract emails...');
+    
     try {
-      const { error: emailError } = await supabase.functions.invoke('send-contract-emails', {
+      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-contract-emails', {
         body: {
           customerEmail: email,
           customerName: fullName,
@@ -193,13 +207,15 @@ serve(async (req) => {
       });
       
       if (emailError) {
-        console.warn('Email sending failed:', emailError);
+        console.warn('izidoc-sign: Email sending failed:', emailError);
       } else {
-        console.log('Contract emails sent successfully');
+        console.log('izidoc-sign: Contract emails sent successfully:', emailData);
       }
     } catch (emailError) {
-      console.warn('Email sending failed:', emailError);
+      console.warn('izidoc-sign: Email sending failed with exception:', emailError);
     }
+
+    console.log('izidoc-sign: Contract processing completed successfully');
 
     return new Response(
       JSON.stringify({
@@ -217,7 +233,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Error in izidoc-sign function:", error);
+    console.error("izidoc-sign: Error in function:", error);
     
     return new Response(
       JSON.stringify({

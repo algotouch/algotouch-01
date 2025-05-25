@@ -1,15 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
 import DigitalContractForm from '@/components/DigitalContractForm';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, User } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth';
+
 interface ContractSectionProps {
   selectedPlan: string;
   fullName: string;
   onSign: (contractData: any) => void;
   onBack: () => void;
 }
+
 const ContractSection: React.FC<ContractSectionProps> = ({
   selectedPlan,
   fullName,
@@ -17,10 +20,7 @@ const ContractSection: React.FC<ContractSectionProps> = ({
   onBack
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const {
-    user,
-    registrationData
-  } = useAuth();
+  const { user, registrationData } = useAuth();
 
   // Log the received fullName for debugging
   useEffect(() => {
@@ -50,8 +50,7 @@ const ContractSection: React.FC<ContractSectionProps> = ({
       onSign({
         ...contractData,
         fullName,
-        // Ensure fullName is passed through
-        userId: user?.id // This will be undefined if the user isn't authenticated
+        userId: user?.id
       });
     } catch (error) {
       console.error('Error signing contract:', error);
@@ -59,15 +58,15 @@ const ContractSection: React.FC<ContractSectionProps> = ({
       setIsProcessing(false);
     }
   };
-  return <div className="space-y-6">
+
+  return (
+    <div className="space-y-6">
       <Alert className="mb-4">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           אנא קרא את ההסכם בעיון וחתום במקום המיועד בתחתית העמוד
         </AlertDescription>
       </Alert>
-
-      {fullName}
       
       <DigitalContractForm onSign={handleSignContract} planId={selectedPlan} fullName={fullName} />
       
@@ -76,10 +75,14 @@ const ContractSection: React.FC<ContractSectionProps> = ({
           חזור
         </Button>
         
-        {isProcessing && <div className="flex items-center text-sm text-muted-foreground">
+        {isProcessing && (
+          <div className="flex items-center text-sm text-muted-foreground">
             מעבד את החתימה...
-          </div>}
+          </div>
+        )}
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default ContractSection;
