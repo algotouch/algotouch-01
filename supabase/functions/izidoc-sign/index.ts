@@ -139,6 +139,7 @@ async function sendContractEmail(
         attachmentSize: contractBase64.length
       });
 
+      // FIXED: Call the SMTP sender function properly instead of calling self
       const emailResponse = await fetch(`${supabaseUrl}/functions/v1/smtp-sender`, {
         method: 'POST',
         headers: {
