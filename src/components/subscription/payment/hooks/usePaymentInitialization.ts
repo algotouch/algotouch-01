@@ -176,6 +176,20 @@ export const usePaymentInitialization = (
     }
   };
 
+  // Helper function to get plan amount (in shekels, not agorot)
+  const getPlanAmount = (plan: string): number => {
+    switch (plan) {
+      case 'monthly':
+        return 1; // Changed to 1₪ for the initial charge of monthly plan
+      case 'annual':
+        return 3371; // 3,371 ₪ (updated to shekels instead of agorot)
+      case 'vip':
+        return 13121; // 13,121 ₪ (updated to shekels instead of agorot)
+      default:
+        return 0;
+    }
+  };
+
   return {
     isLoading,
     paymentUrl,
