@@ -28,6 +28,8 @@ interface PaymentLog {
       last4: string;
     };
   };
+  transaction_id?: string;
+  receipt_url?: string;
 }
 
 interface DatabaseSubscription {
@@ -41,6 +43,8 @@ interface DatabasePaymentLog {
   status: string;
   created_at: string | null;
   payment_data: Json;
+  transaction_id?: string;
+  receipt_url?: string;
 }
 
 export const SubscriptionDetails: React.FC = () => {
@@ -48,6 +52,7 @@ export const SubscriptionDetails: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionDetails | null>(null);
   const [paymentLogs, setPaymentLogs] = useState<PaymentLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -70,6 +75,7 @@ export const SubscriptionDetails: React.FC = () => {
         if (error.code === 'PGRST116') {
           // No subscription found
           setSubscription(null);
+          setInitError('לא נמצא מנוי פעיל');
           return;
         }
         throw error;
@@ -83,6 +89,7 @@ export const SubscriptionDetails: React.FC = () => {
         if (!dbSubscription.status || !dbSubscription.current_period_ends_at) {
           console.error('Invalid subscription data:', dbSubscription);
           toast.error('שגיאה בנתוני המנוי');
+          setInitError('שגיאה בנתוני המנוי');
           return;
         }
 
@@ -101,6 +108,7 @@ export const SubscriptionDetails: React.FC = () => {
     } catch (error) {
       console.error('Error fetching subscription:', error);
       toast.error('שגיאה בטעינת פרטי המנוי');
+      setInitError('שגיאה בטעינת פרטי המנוי');
     } finally {
       setIsLoading(false);
     }
@@ -131,7 +139,9 @@ export const SubscriptionDetails: React.FC = () => {
               card_info: {
                 last4: paymentData?.card_info?.last4 || ''
               }
-            }
+            },
+            transaction_id: log.transaction_id || '',
+            receipt_url: log.receipt_url || ''
           };
         }).filter(log => log.amount > 0); // Filter out invalid logs
 
@@ -182,17 +192,32 @@ export const SubscriptionDetails: React.FC = () => {
     window.location.href = '/subscription?step=1';
   };
 
+  // חישוב חיוב עתידי (אם יש)
+  const getNextCharge = () => {
+    if (!subscription) return null;
+    if (subscription.status !== 'active' && subscription.status !== 'trial') return null;
+    // נניח שמנוי חודשי/שנתי מתחדש אוטומטית
+    const nextDate = new Date(subscription.current_period_ends_at);
+    if (nextDate < new Date()) return null;
+    let amount = 0;
+    if (paymentLogs.length > 0) {
+      // נניח שהסכום של החיוב האחרון הוא הסכום של החיוב הבא
+      amount = paymentLogs[0].amount;
+    }
+    return { date: nextDate, amount };
+  };
+  const nextCharge = getNextCharge();
+
   if (isLoading) {
     return <div>טוען...</div>;
   }
 
+  if (initError) {
+    return <div className="text-red-600 text-center p-4">שגיאה: {initError}</div>;
+  }
+
   if (!subscription) {
-    return (
-      <Card className="p-6">
-        <h2 className="text-2xl font-bold mb-4">אין מנוי פעיל</h2>
-        <Button onClick={handleUpgradeSubscription}>הרשמה למנוי</Button>
-      </Card>
-    );
+    return <div className="text-center p-4">לא נמצא מנוי פעיל. <a href="/subscription" className="text-blue-600 underline">להצטרפות</a></div>;
   }
 
   const formatDate = (dateString: string) => {
@@ -220,11 +245,21 @@ export const SubscriptionDetails: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-gray-600">סטטוס</p>
-              <p className="font-semibold">{getStatusText(subscription.status)}</p>
+              <div className="mb-2">
+                <span>סטטוס מנוי: </span>
+                <span className={subscription.status === 'active' ? 'text-green-600' : subscription.status === 'trial' ? 'text-yellow-600' : 'text-red-600'}>
+                  {subscription.status === 'active' ? 'פעיל' : subscription.status === 'trial' ? 'ניסיון' : 'לא פעיל'}
+                </span>
+              </div>
             </div>
             <div>
               <p className="text-gray-600">תוקף המנוי</p>
-              <p className="font-semibold">{formatDate(subscription.current_period_ends_at)}</p>
+              {subscription.current_period_ends_at && (
+                <div className="mb-2">
+                  <span>תוקף מנוי עד: </span>
+                  <span>{new Date(subscription.current_period_ends_at).toLocaleDateString('he-IL')}</span>
+                </div>
+              )}
             </div>
             {subscription.payment_details?.card_info && (
               <div>
@@ -237,35 +272,49 @@ export const SubscriptionDetails: React.FC = () => {
                 </p>
               </div>
             )}
+            {/* מידע נוסף */}
+            <div>
+              <p className="text-gray-600">סוג מסלול</p>
+              <p className="font-semibold">{paymentLogs[0]?.payment_data?.operation === 'ChargeOnly' ? 'VIP' : paymentLogs[0]?.payment_data?.operation === 'ChargeAndCreateToken' ? 'שנתי' : 'חודשי'}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">תאריך הצטרפות</p>
+              <p className="font-semibold">{paymentLogs.length > 0 ? formatDate(paymentLogs[paymentLogs.length - 1].created_at) : '-'}</p>
+            </div>
           </div>
         </div>
-
-        <div>
-          <h3 className="text-xl font-bold mb-4">היסטוריית תשלומים</h3>
-          <div className="space-y-4">
-            {paymentLogs.map((log, index) => (
-              <div key={index} className="border-b pb-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-semibold">
-                      {log.payment_data.operation === 'ChargeOnly' ? 'תשלום חד פעמי' :
-                       log.payment_data.operation === 'ChargeAndCreateToken' ? 'תשלום שנתי' :
-                       'תשלום חודשי'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {formatDate(log.created_at)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">₪{log.amount}</p>
-                    <p className={`text-sm ${log.status === 'payment_success' ? 'text-green-600' : 'text-red-600'}`}>
-                      {log.status === 'payment_success' ? 'שולם בהצלחה' : 'נכשל'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* חיוב עתידי */}
+        {nextCharge && (
+          <div className="bg-blue-50 p-3 rounded mb-4">
+            <span>החיוב הבא: </span>
+            <span>{nextCharge.amount} ₪</span>
+            <span> ב-</span>
+            <span>{nextCharge.date.toLocaleDateString('he-IL')}</span>
           </div>
+        )}
+
+        <div className="mt-4">
+          <h3 className="font-bold mb-2">היסטוריית תשלומים</h3>
+          {paymentLogs && paymentLogs.length > 0 ? (
+            <ul>
+              {paymentLogs.map((log, idx) => (
+                <li key={`${log.created_at}-${log.amount}-${idx}`} className="mb-1 flex items-center gap-2">
+                  {log.amount} ₪ - {log.status === 'payment_success' ? 'הצלחה' : 'כישלון'}
+                  {log.transaction_id ? ` - ${log.transaction_id}` : ''}
+                  {/* כפתור להורדת קבלה */}
+                  {log.status === 'payment_success' && (
+                    log.receipt_url ? (
+                      <a href={log.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline ml-2">הורד קבלה</a>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => toast.info('קבלה תישלח למייל לאחר עיבוד')}>הורד קבלה</Button>
+                    )
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div>לא נמצאו תשלומים קודמים.</div>
+          )}
         </div>
 
         <div className="flex gap-4">
