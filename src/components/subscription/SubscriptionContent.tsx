@@ -8,17 +8,14 @@ import { toast } from 'sonner';
 import { useSubscriptionContext } from '@/contexts/subscription/SubscriptionContext';
 import { useAuth } from '@/contexts/auth';
 import { Spinner } from '@/components/ui/spinner';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, Home } from 'lucide-react';
 
 const SubscriptionContent = () => {
-  const { hasActiveSubscription, isCheckingSubscription, error: subscriptionError } = useSubscriptionContext();
+  const { hasActiveSubscription, isCheckingSubscription } = useSubscriptionContext();
   const { isAuthenticated, registrationData, clearRegistrationData } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [hasShownError, setHasShownError] = useState(false);
   const [isValidAccess, setIsValidAccess] = useState(false);
-  const [contentError, setContentError] = useState<string | null>(null);
   
   const {
     currentStep,
@@ -34,54 +31,38 @@ const SubscriptionContent = () => {
 
   const isLoading = flowLoading || isCheckingSubscription;
 
-  // Check access validity with error handling
+  // Check access validity
   useEffect(() => {
-    try {
-      console.log('SubscriptionContent: Checking access validity', {
-        isAuthenticated,
-        hasRegistrationData: !!registrationData,
-        path: location.pathname
-      });
-      
-      if (isAuthenticated || registrationData) {
-        console.log('SubscriptionContent: Valid access detected');
-        setIsValidAccess(true);
-        setContentError(null);
-      } else {
-        console.log('SubscriptionContent: Invalid access - no auth or registration data');
-        setIsValidAccess(false);
-      }
-    } catch (error) {
-      console.error('Error checking access validity:', error);
-      setContentError('שגיאה בבדיקת הרשאות גישה');
+    console.log('SubscriptionContent: Checking access validity', {
+      isAuthenticated,
+      hasRegistrationData: !!registrationData,
+      path: location.pathname
+    });
+    
+    if (isAuthenticated || registrationData) {
+      console.log('SubscriptionContent: Valid access detected');
+      setIsValidAccess(true);
+    } else {
+      console.log('SubscriptionContent: Invalid access - no auth or registration data');
+      setIsValidAccess(false);
     }
   }, [isAuthenticated, registrationData, location.pathname]);
 
   // Handle back to auth functionality
   const handleBackToAuth = () => {
-    try {
-      console.log('SubscriptionContent: Handling back to auth');
-      clearRegistrationData();
-      navigate('/auth?tab=signup', { replace: true });
-    } catch (error) {
-      console.error('Error navigating to auth:', error);
-      toast.error('שגיאה בניווט לדף ההרשמה');
-      // Fallback navigation
-      window.location.href = '/auth?tab=signup';
-    }
+    console.log('SubscriptionContent: Handling back to auth');
+    clearRegistrationData();
+    sessionStorage.removeItem('registration_data');
+    navigate('/auth?tab=signup', { replace: true });
   };
 
   // Handle users with active subscription
   useEffect(() => {
-    try {
-      if (hasActiveSubscription && isAuthenticated) {
-        console.log('SubscriptionContent: User has active subscription, redirecting');
-        toast.success('יש לך כבר מנוי פעיל');
-        navigate('/my-subscription', { replace: true });
-        return;
-      }
-    } catch (error) {
-      console.error('Error handling active subscription redirect:', error);
+    if (hasActiveSubscription && isAuthenticated) {
+      console.log('SubscriptionContent: User has active subscription, redirecting');
+      toast.success('יש לך כבר מנוי פעיל');
+      navigate('/my-subscription', { replace: true });
+      return;
     }
   }, [hasActiveSubscription, isAuthenticated, navigate]);
 
@@ -92,52 +73,6 @@ const SubscriptionContent = () => {
         <div className="text-center space-y-4">
           <Spinner size="lg" />
           <p className="text-muted-foreground">טוען נתוני מנוי...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state for subscription context errors
-  if (subscriptionError) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-center space-y-4 max-w-md">
-          <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
-          <div className="text-lg font-semibold">שגיאה בטעינת נתוני מנוי</div>
-          <p className="text-muted-foreground">{subscriptionError}</p>
-          <div className="flex gap-2 justify-center">
-            <Button onClick={() => window.location.reload()}>
-              נסה שוב
-            </Button>
-            <Button variant="outline" onClick={() => navigate('/dashboard')}>
-              <Home className="h-4 w-4 mr-2" />
-              דף הבית
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state for content errors
-  if (contentError) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-center space-y-4 max-w-md">
-          <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
-          <div className="text-lg font-semibold">שגיאה בטעינת התוכן</div>
-          <p className="text-muted-foreground">{contentError}</p>
-          <div className="flex gap-2 justify-center">
-            <Button onClick={() => {
-              setContentError(null);
-              window.location.reload();
-            }}>
-              נסה שוב
-            </Button>
-            <Button variant="outline" onClick={handleBackToAuth}>
-              חזור להרשמה
-            </Button>
-          </div>
         </div>
       </div>
     );

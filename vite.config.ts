@@ -21,21 +21,9 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Ensure single React instance - critical for preventing useRef/useContext errors
       "react": path.resolve(__dirname, "./node_modules/react"),
-      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
-      "react-router-dom": path.resolve(__dirname, "./node_modules/react-router-dom")
+      "react-dom": path.resolve(__dirname, "./node_modules/react-dom")
     },
-    // Force resolution to exact paths to prevent duplicate React
-    dedupe: ['react', 'react-dom']
-  },
-  optimizeDeps: {
-    // Force bundling of React dependencies to prevent conflicts
-    include: ['react', 'react-dom', 'react-router-dom'],
-    // Exclude problematic dependencies that might cause React conflicts
-    exclude: [],
-    // Force re-optimization of React dependencies
-    force: mode === 'development'
   },
   build: {
     // Force inline critical modules
@@ -46,16 +34,11 @@ export default defineConfig(({ mode }) => ({
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]',
-        // Define manual chunks to ensure consistent chunk names and prevent React conflicts
+        // Define manual chunks to ensure consistent chunk names
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'ui-components': ['lucide-react', '@radix-ui/react-toast', '@radix-ui/react-dialog']
         }
-      },
-      // Ensure React is treated as external in the right contexts
-      external: (id) => {
-        // Don't externalize React in the main build
-        return false;
       }
     },
     chunkSizeWarningLimit: 1000,
@@ -63,15 +46,5 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
     // Improve error handling in production
     reportCompressedSize: true,
-    // Add specific options to prevent React conflicts
-    commonjsOptions: {
-      include: [/react/, /react-dom/, /node_modules/]
-    }
-  },
-  // Additional dev server options to prevent caching issues
-  esbuild: {
-    // Ensure consistent JSX handling
-    jsx: 'automatic',
-    jsxDev: mode === 'development'
   }
 }));

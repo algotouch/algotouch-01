@@ -1,86 +1,99 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from './AuthContext';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
-import { supabase } from '@/lib/supabase-client';
 import { RegistrationData as AuthRegistrationData } from './types';
-import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase-client';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useSecureAuth();
+  const navigate = useNavigate();
+  const [hasError, setHasError] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  
+  // Registration state management
   const [registrationData, setRegistrationData] = useState<AuthRegistrationData | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [pendingSubscription, setPendingSubscription] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
   
-  // Load registration data from session storage with better error handling
+  // Load registration data from session storage on mount
   useEffect(() => {
     try {
       const storedData = sessionStorage.getItem('registration_data');
       if (storedData) {
         const data = JSON.parse(storedData);
-        // Validate the data structure
-        if (data && typeof data === 'object') {
-          setRegistrationData(data);
+        
+        console.log('AuthProvider: Found stored registration data:', {
+          email: data.email,
+          hasUserData: !!data.userData,
+          timestamp: data.registrationTime
+        });
+        
+        // Check if data is still valid (within 2 hours - extended time)
+        const registrationTime = data.registrationTime ? new Date(data.registrationTime) : null;
+        const now = new Date();
+        const isValid = registrationTime && 
+          ((now.getTime() - registrationTime.getTime()) < 2 * 60 * 60 * 1000); // 2 hours
+        
+        if (isValid) {
+          console.log('AuthProvider: Registration data is valid, setting state');
+          setRegistrationData({ ...data, isValid });
           setIsRegistering(true);
           setPendingSubscription(true);
-          console.log('Loaded registration data from storage');
         } else {
-          console.warn('Invalid registration data structure, clearing');
+          console.log('AuthProvider: Registration data expired, clearing');
+          // Clear stale registration data
           sessionStorage.removeItem('registration_data');
         }
       }
     } catch (error) {
-      console.error("Error parsing registration data:", error);
-      // Clear corrupted data
-      try {
-        sessionStorage.removeItem('registration_data');
-      } catch (clearError) {
-        console.error("Could not clear corrupted registration data:", clearError);
-      }
-      setInitError('שגיאה בטעינת נתוני הרשמה');
+      console.error("AuthProvider: Error parsing registration data:", error);
+      sessionStorage.removeItem('registration_data');
     }
   }, []);
   
+  // Update registration data in session storage when state changes
   const updateRegistrationData = (data: Partial<AuthRegistrationData>) => {
-    try {
-      const updatedData = {
-        ...(registrationData || {}),
-        ...data,
-        registrationTime: data.registrationTime || new Date().toISOString()
-      };
-      
-      setRegistrationData(updatedData as AuthRegistrationData);
-      setIsRegistering(true);
-      setPendingSubscription(true);
-      
-      sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
-      console.log('Updated registration data');
-    } catch (error) {
-      console.error('Error updating registration data:', error);
-      toast.error('שגיאה בשמירת נתוני הרשמה');
-    }
+    console.log('AuthProvider: Updating registration data:', {
+      email: data.email,
+      hasUserData: !!data.userData
+    });
+    
+    const updatedData = {
+      ...(registrationData || {}),
+      ...data,
+      registrationTime: data.registrationTime || new Date().toISOString()
+    };
+    
+    // Update state first
+    setRegistrationData(updatedData as AuthRegistrationData);
+    setIsRegistering(true);
+    setPendingSubscription(true);
+    
+    // Then update sessionStorage
+    sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
+    
+    console.log('AuthProvider: Registration data updated successfully');
   };
   
+  // Clear registration data
   const clearRegistrationData = () => {
-    try {
-      sessionStorage.removeItem('registration_data');
-      sessionStorage.removeItem('force_subscription_access');
-      localStorage.removeItem('temp_registration_id');
-      setRegistrationData(null);
-      setIsRegistering(false);
-      setPendingSubscription(false);
-      setInitError(null);
-      console.log('Cleared registration data');
-    } catch (error) {
-      console.error('Error clearing registration data:', error);
-    }
+    console.log('AuthProvider: Clearing registration data');
+    sessionStorage.removeItem('registration_data');
+    sessionStorage.removeItem('force_subscription_access');
+    localStorage.removeItem('temp_registration_id');
+    setRegistrationData(null);
+    setIsRegistering(false);
+    setPendingSubscription(false);
   };
   
+  // Validate session with the server
   const validateSession = async () => {
     if (!auth.session) return false;
     
     try {
+      // Use the imported supabase client directly
       const { data, error } = await supabase.auth.getUser();
       if (error) {
         console.error('Session validation error:', error);
@@ -94,35 +107,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Show loading while auth is initializing
-  if (!auth.initialized) {
+  // Add error handling for auth initialization
+  useEffect(() => {
+    // Set a timeout to detect if auth initialization takes too long
+    const timeoutId = setTimeout(() => {
+      if (!auth.initialized && isInitializing) {
+        console.error('Auth initialization took too long, showing error page');
+        setHasError(true);
+      }
+    }, 10000); // 10 seconds timeout
+    
+    // Clear timeout when auth is initialized
+    if (auth.initialized) {
+      clearTimeout(timeoutId);
+      setIsInitializing(false);
+    }
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [auth.initialized, isInitializing]);
+  
+  // If there's an auth error, redirect to the error page
+  useEffect(() => {
+    if (hasError) {
+      navigate('/auth-error', { replace: true });
+    }
+  }, [hasError, navigate]);
+  
+  // Show a global loader when auth is initializing to prevent flashes of content
+  if (!auth.initialized && !hasError) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-t-primary"></div>
       </div>
     );
   }
-
-  // Show error state if there's an initialization error
-  if (initError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="text-center space-y-4">
-          <div className="text-red-600 text-lg font-semibold">שגיאה באתחול המערכת</div>
-          <p className="text-muted-foreground">{initError}</p>
-          <button 
-            onClick={() => {
-              setInitError(null);
-              clearRegistrationData();
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-          >
-            נסה שוב
-          </button>
-        </div>
-      </div>
-    );
+  
+  // If initialization is complete but there was an error
+  if (hasError) {
+    return null; // Will be redirected to error page via the useEffect
   }
 
   return (

@@ -1,21 +1,11 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
-import { ThemeProvider } from '@/contexts/theme';
-import { SafeAuthProvider } from '@/contexts/auth/SafeAuthProvider';
+import { AuthProvider } from '@/contexts/auth';
 import { DirectionProvider } from '@/contexts/direction/DirectionProvider';
 import { StockDataProvider } from '@/contexts/stock/StockDataContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import ErrorBoundary from '@/components/ErrorBoundary';
-import { ReactErrorBoundary } from '@/components/ReactErrorBoundary';
-import ContextErrorBoundary from '@/components/ContextErrorBoundary';
-import { Button } from '@/components/ui/button';
-import { RefreshCw, Home, AlertTriangle } from 'lucide-react';
-
-// Add console logging to track React initialization
-console.log('App.tsx: React version:', React.version);
-console.log('App.tsx: Starting app initialization');
 
 // Eagerly loaded routes for critical paths
 import Auth from '@/pages/Auth';
@@ -26,299 +16,138 @@ import PaymentFailed from '@/pages/PaymentFailed';
 import NotFound from '@/pages/NotFound';
 import AuthLoadError from '@/pages/AuthLoadError';
 
-// Lazy loaded routes with error handling
-const Subscription = lazy(() => {
-  console.log('App.tsx: Loading Subscription component');
-  return import('@/pages/Subscription').catch(error => {
-    console.error('App.tsx: Failed to load Subscription component:', error);
+// Lazy loaded routes with retry utility
+const loadModuleWithRetry = (importFn, name) => {
+  console.log(`Loading module: ${name}`);
+  return importFn().catch(error => {
+    console.error(`Error loading ${name}:`, error);
     throw error;
   });
-});
+};
 
-const Community = lazy(() => {
-  console.log('App.tsx: Loading Community component');
-  return import('@/pages/Community').catch(error => {
-    console.error('App.tsx: Failed to load Community component:', error);
-    throw error;
-  });
-});
+// Lazy loaded less critical routes
+const Subscription = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Subscription'), 'Subscription')
+);
 
-const Courses = lazy(() => {
-  console.log('App.tsx: Loading Courses component');
-  return import('@/pages/Courses').catch(error => {
-    console.error('App.tsx: Failed to load Courses component:', error);
-    throw error;
-  });
-});
+// Fix imports for components that may have different export names
+const Community = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Community'), 'Community')
+);
 
-const CourseDetail = lazy(() => {
-  console.log('App.tsx: Loading CourseDetail component');
-  return import('@/pages/CourseDetail').catch(error => {
-    console.error('App.tsx: Failed to load CourseDetail component:', error);
-    throw error;
-  });
-});
+const Courses = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Courses'), 'Courses')
+);
 
-const Account = lazy(() => {
-  console.log('App.tsx: Loading Account component');
-  return import('@/pages/Account').catch(error => {
-    console.error('App.tsx: Failed to load Account component:', error);
-    throw error;
-  });
-});
+const CourseDetail = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/CourseDetail'), 'CourseDetail')
+);
 
-const MonthlyReport = lazy(() => {
-  console.log('App.tsx: Loading MonthlyReport component');
-  return import('@/pages/MonthlyReport').catch(error => {
-    console.error('App.tsx: Failed to load MonthlyReport component:', error);
-    throw error;
-  });
-});
+const Account = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Account'), 'Account')
+);
 
-const Calendar = lazy(() => {
-  console.log('App.tsx: Loading Calendar component');
-  return import('@/pages/Calendar').catch(error => {
-    console.error('App.tsx: Failed to load Calendar component:', error);
-    throw error;
-  });
-});
+// Add missing page components
+const MonthlyReport = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/MonthlyReport'), 'MonthlyReport')
+);
+const Calendar = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Calendar'), 'Calendar')
+);
+const TradeJournal = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/TradeJournal'), 'TradeJournal')
+);
+const Journal = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Journal'), 'Journal')
+);
+const Profile = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Profile'), 'Profile')
+);
+const NewTrade = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/NewTrade'), 'NewTrade')
+);
+const Blog = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/Blog'), 'Blog')
+);
+const BlogPost = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/BlogPost'), 'BlogPost')
+);
+const AIAssistant = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/AIAssistant'), 'AIAssistant')
+);
+const ContractDetails = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/ContractDetails'), 'ContractDetails')
+);
+const MySubscriptionPage = lazy(() => 
+  loadModuleWithRetry(() => import('@/pages/MySubscriptionPage'), 'MySubscriptionPage')
+);
 
-const TradeJournal = lazy(() => {
-  console.log('App.tsx: Loading TradeJournal component');
-  return import('@/pages/TradeJournal').catch(error => {
-    console.error('App.tsx: Failed to load TradeJournal component:', error);
-    throw error;
-  });
-});
-
-const Journal = lazy(() => {
-  console.log('App.tsx: Loading Journal component');
-  return import('@/pages/Journal').catch(error => {
-    console.error('App.tsx: Failed to load Journal component:', error);
-    throw error;
-  });
-});
-
-const Profile = lazy(() => {
-  console.log('App.tsx: Loading Profile component');
-  return import('@/pages/Profile').catch(error => {
-    console.error('App.tsx: Failed to load Profile component:', error);
-    throw error;
-  });
-});
-
-const NewTrade = lazy(() => {
-  console.log('App.tsx: Loading NewTrade component');
-  return import('@/pages/NewTrade').catch(error => {
-    console.error('App.tsx: Failed to load NewTrade component:', error);
-    throw error;
-  });
-});
-
-const Blog = lazy(() => {
-  console.log('App.tsx: Loading Blog component');
-  return import('@/pages/Blog').catch(error => {
-    console.error('App.tsx: Failed to load Blog component:', error);
-    throw error;
-  });
-});
-
-const BlogPost = lazy(() => {
-  console.log('App.tsx: Loading BlogPost component');
-  return import('@/pages/BlogPost').catch(error => {
-    console.error('App.tsx: Failed to load BlogPost component:', error);
-    throw error;
-  });
-});
-
-const AIAssistant = lazy(() => {
-  console.log('App.tsx: Loading AIAssistant component');
-  return import('@/pages/AIAssistant').catch(error => {
-    console.error('App.tsx: Failed to load AIAssistant component:', error);
-    throw error;
-  });
-});
-
-const ContractDetails = lazy(() => {
-  console.log('App.tsx: Loading ContractDetails component');
-  return import('@/pages/ContractDetails').catch(error => {
-    console.error('App.tsx: Failed to load ContractDetails component:', error);
-    throw error;
-  });
-});
-
-const MySubscriptionPage = lazy(() => {
-  console.log('App.tsx: Loading MySubscriptionPage component');
-  return import('@/pages/MySubscriptionPage').catch(error => {
-    console.error('App.tsx: Failed to load MySubscriptionPage component:', error);
-    throw error;
-  });
-});
-
-// Simple loading component with better error feedback
+// Loading component for Suspense
 const LoadingPage = () => (
   <div className="flex h-screen w-full items-center justify-center">
-    <div className="text-center space-y-4">
-      <Spinner size="lg" />
-      <p className="text-muted-foreground">טוען...</p>
-    </div>
+    <Spinner size="lg" />
   </div>
 );
 
-// Enhanced error fallback component
-const ErrorFallback = () => {
-  const handleReload = () => {
-    console.log('ErrorFallback: Reloading application');
-    try {
-      sessionStorage.removeItem('registration_data');
-      localStorage.removeItem('temp_registration_id');
-    } catch (e) {
-      console.warn('ErrorFallback: Could not clear storage:', e);
-    }
-    window.location.reload();
-  };
-
-  const handleGoHome = () => {
-    console.log('ErrorFallback: Navigating to home');
-    try {
-      sessionStorage.removeItem('registration_data');
-      localStorage.removeItem('temp_registration_id');
-    } catch (e) {
-      console.warn('ErrorFallback: Could not clear storage:', e);
-    }
-    window.location.href = '/dashboard';
-  };
-
-  return (
-    <div className="flex h-screen w-full items-center justify-center p-4">
-      <div className="text-center space-y-6 max-w-md">
-        <AlertTriangle className="h-16 w-16 text-destructive mx-auto" />
-        <div>
-          <h1 className="text-2xl font-bold mb-2">שגיאה באפליקציה</h1>
-          <p className="text-muted-foreground">
-            אירעה שגיאה לא צפויה. אנא נסה שוב או חזור לדף הבית.
-          </p>
-        </div>
-        <div className="flex gap-4 justify-center">
-          <Button onClick={handleReload} className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            רענן דף
-          </Button>
-          <Button variant="outline" onClick={handleGoHome} className="flex items-center gap-2">
-            <Home className="h-4 w-4" />
-            דף הבית
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          אם הבעיה נמשכת, אנא צור קשר עם התמיכה
-        </p>
-      </div>
-    </div>
-  );
-};
-
 function App() {
-  console.log('App.tsx: Rendering App component');
-  
-  // Add React environment checks
-  React.useEffect(() => {
-    console.log('App.tsx: React environment check:', {
-      reactVersion: React.version,
-      isDevelopment: process.env.NODE_ENV === 'development',
-      hasReactDevTools: typeof window !== 'undefined' && !!(window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__,
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-    });
-  }, []);
-
   return (
-    <ReactErrorBoundary fallbackMessage="שגיאת React זוהתה ברמת האפליקציה העליונה">
-      <ErrorBoundary fallback={<ErrorFallback />}>
-        <BrowserRouter>
-          <ReactErrorBoundary fallbackMessage="שגיאה בטעינת ספקי הקונטקסט">
-            <ContextErrorBoundary contextName="ThemeProvider">
-              <ErrorBoundary fallback={
-                <div className="min-h-screen flex items-center justify-center p-4">
-                  <div className="text-center space-y-4">
-                    <h2 className="text-xl font-bold">בעיה זמנית עם הערכת הנושא</h2>
-                    <p className="text-muted-foreground">האפליקציה תמשיך לפעול במצב בסיסי</p>
-                    <button 
-                      onClick={() => window.location.reload()}
-                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                      רענן דף
-                    </button>
-                  </div>
-                </div>
-              }>
-                <ThemeProvider>
-                  <ContextErrorBoundary contextName="DirectionProvider">
-                    <DirectionProvider dir="rtl">
-                      <ContextErrorBoundary contextName="AuthProvider">
-                        <SafeAuthProvider>
-                          <ContextErrorBoundary contextName="StockDataProvider">
-                            <ErrorBoundary fallback={
-                              <div className="p-4 text-center">
-                                <p className="text-orange-600 mb-2">בעיה זמנית בטעינת נתוני מדדים</p>
-                                <p className="text-sm text-muted-foreground">האפליקציה תמשיך לפעול בצורה רגילה</p>
-                              </div>
-                            }>
-                              <StockDataProvider refreshInterval={30000}>
-                                <ReactErrorBoundary fallbackMessage="שגיאה בטעינת המסלולים">
-                                  <Suspense fallback={<LoadingPage />}>
-                                    <Routes>
-                                      {/* Auth Error Route */}
-                                      <Route path="/auth-error" element={<AuthLoadError />} />
-                                      
-                                      {/* Public routes */}
-                                      <Route path="/auth" element={<Auth />} />
-                                      
-                                      {/* Payment routes */}
-                                      <Route path="/payment/redirect" element={<IframeRedirect />} />
-                                      <Route path="/payment/success" element={<PaymentSuccess />} />
-                                      <Route path="/payment/failed" element={<PaymentFailed />} />
-                                      
-                                      {/* Protected routes */}
-                                      <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-                                        <Route path="/dashboard" element={<Dashboard />} />
-                                        <Route path="/subscription" element={<Subscription />} />
-                                        <Route path="/community" element={<Community />} />
-                                        <Route path="/courses" element={<Courses />} />
-                                        <Route path="/courses/:courseId" element={<CourseDetail />} />
-                                        <Route path="/account" element={<Account />} />
-                                        <Route path="/monthly-report" element={<MonthlyReport />} />
-                                        <Route path="/calendar" element={<Calendar />} />
-                                        <Route path="/trade-journal" element={<TradeJournal />} />
-                                        <Route path="/journal" element={<Journal />} />
-                                        <Route path="/profile" element={<Profile />} />
-                                        <Route path="/new-trade" element={<NewTrade />} />
-                                        <Route path="/blog" element={<Blog />} />
-                                        <Route path="/blog/:id" element={<BlogPost />} />
-                                        <Route path="/ai-assistant" element={<AIAssistant />} />
-                                        <Route path="/contract/:contractId" element={<ContractDetails />} />
-                                        <Route path="/my-subscription" element={<MySubscriptionPage />} />
-                                      </Route>
-                                      
-                                      {/* Default & catch-all routes */}
-                                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                      <Route path="*" element={<NotFound />} />
-                                    </Routes>
-                                  </Suspense>
-                                </ReactErrorBoundary>
-                              </StockDataProvider>
-                            </ErrorBoundary>
-                            <Toaster richColors position="top-center" dir="rtl" />
-                          </ContextErrorBoundary>
-                        </SafeAuthProvider>
-                      </ContextErrorBoundary>
-                    </DirectionProvider>
-                  </ContextErrorBoundary>
-                </ThemeProvider>
-              </ErrorBoundary>
-            </ContextErrorBoundary>
-          </ReactErrorBoundary>
-        </BrowserRouter>
-      </ErrorBoundary>
-    </ReactErrorBoundary>
+    <BrowserRouter>
+      <DirectionProvider dir="rtl">
+        <Suspense fallback={<LoadingPage />}>
+          <Routes>
+            {/* Auth Error Route */}
+            <Route path="/auth-error" element={<AuthLoadError />} />
+            
+            {/* Auth Provider wrapped routes */}
+            <Route
+              element={
+                <AuthProvider>
+                  <StockDataProvider refreshInterval={30000}>
+                    <Outlet />
+                  </StockDataProvider>
+                </AuthProvider>
+              }
+            >
+              {/* Public routes - eagerly loaded */}
+              <Route path="/auth" element={<Auth />} />
+              
+              {/* Payment routes - eagerly loaded */}
+              <Route path="/payment/redirect" element={<IframeRedirect />} />
+              <Route path="/payment/success" element={<PaymentSuccess />} />
+              <Route path="/payment/failed" element={<PaymentFailed />} />
+              
+              {/* Protected routes */}
+              <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/subscription" element={<Subscription />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/courses" element={<Courses />} />
+                <Route path="/courses/:courseId" element={<CourseDetail />} />
+                <Route path="/account" element={<Account />} />
+                
+                {/* Add missing routes here */}
+                <Route path="/monthly-report" element={<MonthlyReport />} />
+                <Route path="/calendar" element={<Calendar />} />
+                <Route path="/trade-journal" element={<TradeJournal />} />
+                <Route path="/journal" element={<Journal />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/new-trade" element={<NewTrade />} />
+                <Route path="/blog" element={<Blog />} />
+                <Route path="/blog/:id" element={<BlogPost />} />
+                <Route path="/ai-assistant" element={<AIAssistant />} />
+                <Route path="/contract/:contractId" element={<ContractDetails />} />
+                <Route path="/my-subscription" element={<MySubscriptionPage />} />
+              </Route>
+              
+              {/* Default & catch-all routes */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </Suspense>
+        <Toaster richColors position="top-center" dir="rtl" />
+      </DirectionProvider>
+    </BrowserRouter>
   );
 }
 

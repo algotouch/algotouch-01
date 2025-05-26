@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase-client';
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User, AuthError } from '@supabase/supabase-js';
 
 export function useSecureAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -11,32 +11,25 @@ export function useSecureAuth() {
   const [error, setError] = useState<Error | null>(null);
   const isAuthenticated = !!session && !!user;
 
+  // Initialize auth state
   useEffect(() => {
     let mounted = true;
-    let authSubscription: any = null;
 
-    const initializeAuth = async () => {
+    async function initializeAuth() {
       try {
-        console.log('Initializing auth...');
-        
+        // First set up auth subscription to detect changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, currentSession) => {
-            console.log('Auth state changed:', event, !!currentSession);
             if (mounted) {
               setSession(currentSession);
               setUser(currentSession?.user || null);
-              if (event === 'SIGNED_OUT') {
-                setError(null);
-              }
             }
           }
         );
-        
-        authSubscription = subscription;
 
+        // Then check current session
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError && mounted) {
-          console.error('Session error:', sessionError);
           setError(sessionError);
         }
 
@@ -45,8 +38,12 @@ export function useSecureAuth() {
           setUser(data.session?.user || null);
           setLoading(false);
           setInitialized(true);
-          console.log('Auth initialized successfully');
         }
+
+        return () => {
+          mounted = false;
+          subscription.unsubscribe();
+        };
       } catch (err) {
         if (mounted) {
           console.error('Auth initialization error:', err);
@@ -55,21 +52,18 @@ export function useSecureAuth() {
           setInitialized(true);
         }
       }
-    };
+    }
 
     initializeAuth();
 
     return () => {
       mounted = false;
-      if (authSubscription) {
-        authSubscription.unsubscribe();
-      }
     };
   }, []);
 
+  // Authentication methods
   const signIn = async (email: string, password: string) => {
     try {
-      setError(null);
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -91,7 +85,6 @@ export function useSecureAuth() {
 
   const signUp = async (email: string, password: string, userData?: any) => {
     try {
-      setError(null);
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -116,7 +109,6 @@ export function useSecureAuth() {
 
   const signOut = async () => {
     try {
-      setError(null);
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
         setError(signOutError);
@@ -130,7 +122,6 @@ export function useSecureAuth() {
 
   const updateProfile = async (userData: any) => {
     try {
-      setError(null);
       const { data, error: updateError } = await supabase.auth.updateUser({
         data: userData
       });
@@ -151,7 +142,6 @@ export function useSecureAuth() {
 
   const resetPassword = async (email: string) => {
     try {
-      setError(null);
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email,
         {
