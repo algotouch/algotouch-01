@@ -1,339 +1,70 @@
 
-/* CREDIT CARD STYLES */
-.preload * {
-    transition: none !important;
+.creditCard {
+  width: 300px;
+  height: 190px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  transition: transform 0.6s ease-in-out;
+  transform-style: preserve-3d;
 }
 
-.container {
-    width: 100%;
-    max-width: 400px;
-    max-height: 251px;
-    height: 54vw;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    margin: 0 auto;
-    perspective: 1000px;
+.creditCard.flipped {
+  transform: rotateY(180deg);
 }
 
-.creditcard {
-    width: 100%;
-    max-width: 400px;
-    transform-style: preserve-3d;
-    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    cursor: pointer;
-    position: relative;
-    height: 100%;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+.cardFront,
+.cardBack {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 15px;
+  padding: 20px;
+  color: white;
 }
 
-.creditcard .front,
-.creditcard .back {
-    position: absolute;
-    width: 100%;
-    max-width: 400px;
-    backface-visibility: hidden;
-    -webkit-font-smoothing: antialiased;
-    color: #47525d;
-    height: 100%;
-    border-radius: 16px;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-    overflow: hidden;
+.cardBack {
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 
-.creditcard .back {
-    transform: rotateY(180deg);
+.cardNumber {
+  font-size: 18px;
+  letter-spacing: 2px;
+  margin: 30px 0 20px 0;
+  font-family: 'Courier New', monospace;
 }
 
-.creditcard.flipped {
-    transform: rotateY(180deg);
+.cardHolder {
+  font-size: 14px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
 }
 
-.ccsingle {
-    position: absolute;
-    right: 15px;
-    top: 20px;
-    z-index: 2;
+.cardExpiry {
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
 }
 
-.ccsingle svg,
-.ccsingle img {
-    width: 60px;
-    max-height: 40px;
-    filter: drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.2));
+.cvvLabel {
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 
-.ccicon {
-    height: 38px;
-    position: absolute;
-    right: 6px;
-    top: calc(50% - 17px);
-    width: 60px;
-    z-index: 2;
+.cvvNumber {
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  background: white;
+  color: black;
+  padding: 5px 10px;
+  border-radius: 4px;
+  display: inline-block;
 }
 
-/* CHANGEABLE CARD ELEMENTS */
-.creditcard .lightcolor,
-.creditcard .darkcolor {
-    transition: fill .6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+.magneticStrip {
+  height: 40px;
+  background: linear-gradient(90deg, #333, #666, #333);
+  margin: 20px -20px;
 }
-
-.creditcard .lightblue {
-    fill: #03A9F4;
-}
-
-.creditcard .lightbluedark {
-    fill: #0288D1;
-}
-
-.creditcard .red {
-    fill: #ef5350;
-}
-
-.creditcard .reddark {
-    fill: #d32f2f;
-}
-
-.creditcard .purple {
-    fill: #ab47bc;
-}
-
-.creditcard .purpledark {
-    fill: #7b1fa2;
-}
-
-.creditcard .cyan {
-    fill: #26c6da;
-}
-
-.creditcard .cyandark {
-    fill: #0097a7;
-}
-
-.creditcard .green {
-    fill: #66bb6a;
-}
-
-.creditcard .greendark {
-    fill: #388e3c;
-}
-
-.creditcard .lime {
-    fill: #d4e157;
-}
-
-.creditcard .limedark {
-    fill: #afb42b;
-}
-
-.creditcard .yellow {
-    fill: #ffeb3b;
-}
-
-.creditcard .yellowdark {
-    fill: #f9a825;
-}
-
-.creditcard .orange {
-    fill: #ff9800;
-}
-
-.creditcard .orangedark {
-    fill: #ef6c00;
-}
-
-.creditcard .grey {
-    fill: #9e9e9e;
-}
-
-.creditcard .greydark {
-    fill: #616161;
-}
-
-/* FRONT OF CARD */
-.st2 {
-    fill: #FFFFFF;
-}
-
-.st3 {
-    font-family: 'Source Code Pro', monospace, Arial, sans-serif;
-    font-weight: 600;
-}
-
-.st4 {
-    font-size: 27px;
-    letter-spacing: 2px;
-}
-
-.st5 {
-    font-family: 'Source Code Pro', monospace, Arial, sans-serif;
-    font-weight: 400;
-}
-
-.st6 {
-    font-size: 16px;
-    letter-spacing: 1px;
-}
-
-.st7 {
-    opacity: 0.6;
-    fill: #FFFFFF;
-}
-
-.st8 {
-    font-size: 13px;
-}
-
-.st9 {
-    font-size: 19px;
-    letter-spacing: 1px;
-}
-
-.st10 {
-    font-family: 'Source Code Pro', monospace, Arial, sans-serif;
-    font-weight: 300;
-}
-
-.st11 {
-    font-size: 12px;
-}
-
-.st12 {
-    fill: #4C4C4C;
-}
-
-/* BACK OF CARD */
-.st0 {
-    fill: none;
-    stroke: #0F0F0F;
-    stroke-miterlimit: 10;
-}
-
-.st3back {
-    fill: #111111;
-}
-
-.st4back {
-    fill: #F2F2F2;
-}
-
-.st5back {
-    fill: #C4C4C4;
-}
-
-.st6back {
-    font-family: 'Source Code Pro', monospace, Arial, sans-serif;
-    font-weight: 400;
-}
-
-.st7back {
-    font-size: 27px;
-}
-
-.st8back {
-    opacity: 0.6;
-}
-
-.st9back {
-    fill: #FFFFFF;
-}
-
-.st10back {
-    font-size: 14px;
-}
-
-.st11back {
-    fill: #EAEAEA;
-}
-
-.st12back {
-    font-family: 'Source Code Pro', monospace, Arial, sans-serif;
-}
-
-.st13back {
-    font-size: 16px;
-}
-
-/* Card types */
-.cardLogo {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 60px;
-    height: 40px;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    transition: all 0.3s ease;
-}
-
-/* Responsive styles */
-@media screen and (max-width: 768px) {
-    .container {
-        height: 54vw;
-    }
-    .st4 {
-        font-size: 24px;
-    }
-    .st6 {
-        font-size: 14px;
-    }
-    .st9 {
-        font-size: 17px;
-    }
-}
-
-@media screen and (max-width: 480px) {
-    .container {
-        height: 64vw;
-        padding: 10px;
-    }
-    .st4 {
-        font-size: 20px;
-    }
-    .st6 {
-        font-size: 12px;
-    }
-    .st9 {
-        font-size: 14px;
-    }
-    .cardLogo {
-        width: 50px;
-        height: 25px;
-    }
-}
-
-/* Add a elegant shine effect */
-.creditcard::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 200%;
-    height: 100%;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent
-    );
-    transform: rotate(25deg);
-    transition: 0.8s;
-    opacity: 0;
-    z-index: 3;
-    pointer-events: none;
-}
-
-.creditcard:hover::after {
-    left: 100%;
-    opacity: 1;
-}
-
-/* Add support for RTL text direction */
-[dir="rtl"] .creditcard .front,
-[dir="rtl"] .creditcard .back {
-    direction: ltr; /* Keep SVG internals as LTR */
-}
-
-/* Add source code pro font for credit card numbers */
-@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&display=swap');
