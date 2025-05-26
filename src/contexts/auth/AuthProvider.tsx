@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthContext } from './AuthContext';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
+import { supabase } from '@/lib/supabase-client';
 import { RegistrationData as AuthRegistrationData } from './types';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
