@@ -30,11 +30,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timestamp: data.registrationTime
         });
         
-        // Check if data is still valid (within 2 hours)
+        // Check if data is still valid (within 2 hours - extended time)
         const registrationTime = data.registrationTime ? new Date(data.registrationTime) : null;
         const now = new Date();
         const isValid = registrationTime && 
-          ((now.getTime() - registrationTime.getTime()) < 2 * 60 * 60 * 1000);
+          ((now.getTime() - registrationTime.getTime()) < 2 * 60 * 60 * 1000); // 2 hours
         
         if (isValid) {
           console.log('AuthProvider: Registration data is valid, setting state');
@@ -43,6 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setPendingSubscription(true);
         } else {
           console.log('AuthProvider: Registration data expired, clearing');
+          // Clear stale registration data
           sessionStorage.removeItem('registration_data');
         }
       }
@@ -65,10 +66,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       registrationTime: data.registrationTime || new Date().toISOString()
     };
     
+    // Update state first
     setRegistrationData(updatedData as AuthRegistrationData);
     setIsRegistering(true);
     setPendingSubscription(true);
     
+    // Then update sessionStorage
     sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
     
     console.log('AuthProvider: Registration data updated successfully');
@@ -90,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!auth.session) return false;
     
     try {
+      // Use the imported supabase client directly
       const { data, error } = await supabase.auth.getUser();
       if (error) {
         console.error('Session validation error:', error);
@@ -103,15 +107,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Handle initialization timeout
+  // Add error handling for auth initialization
   useEffect(() => {
+    // Set a timeout to detect if auth initialization takes too long
     const timeoutId = setTimeout(() => {
       if (!auth.initialized && isInitializing) {
-        console.warn('Auth initialization timeout, continuing with default state');
-        setIsInitializing(false);
+        console.error('Auth initialization took too long, showing error page');
+        setHasError(true);
       }
-    }, 10000);
+    }, 10000); // 10 seconds timeout
     
+    // Clear timeout when auth is initialized
     if (auth.initialized) {
       clearTimeout(timeoutId);
       setIsInitializing(false);
@@ -122,22 +128,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [auth.initialized, isInitializing]);
   
-  // Handle auth errors
+  // If there's an auth error, redirect to the error page
   useEffect(() => {
-    if (auth.error) {
-      console.error('Auth error detected:', auth.error);
-      // Don't redirect on every error, just log it
-      setHasError(false); // Reset error state to prevent redirect loops
+    if (hasError) {
+      navigate('/auth-error', { replace: true });
     }
-  }, [auth.error]);
+  }, [hasError, navigate]);
   
-  // Show loading only briefly during initialization
-  if (!auth.initialized && isInitializing) {
+  // Show a global loader when auth is initializing to prevent flashes of content
+  if (!auth.initialized && !hasError) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-t-primary"></div>
       </div>
     );
+  }
+  
+  // If initialization is complete but there was an error
+  if (hasError) {
+    return null; // Will be redirected to error page via the useEffect
   }
 
   return (

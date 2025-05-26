@@ -10,11 +10,14 @@ import { initializeServiceWorker } from './lib/serviceWorkerInit';
 // Cache buster timestamp for all dynamic imports
 window.__VITE_TIMESTAMP__ = Date.now();
 
-// Initialize the service worker
-initializeServiceWorker();
-
-// Initialize the React application immediately - no DOM waiting
-initializeApp();
+// Make sure the DOM is fully loaded before initializing React
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize the service worker
+  initializeServiceWorker();
+  
+  // Initialize the React application
+  initializeApp();
+});
 
 // Add TypeScript declaration for window object
 declare global {
