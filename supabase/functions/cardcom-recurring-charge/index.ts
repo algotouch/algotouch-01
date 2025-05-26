@@ -47,16 +47,17 @@ serve(async (req) => {
       throw new Error('CardCom credentials not configured')
     }
 
-    // Prepare charge request according to Cardcom documentation
+    // Prepare charge request with CORRECT LOWERCASE parameters
     const formData = new URLSearchParams({
-      'TerminalNumber': terminalNumber,
-      'UserName': userName,
+      'terminalnumber': terminalNumber, // lowercase
+      'username': userName, // lowercase
+      'codepage': '65001', // Required for UTF-8
+      'apilevel': '10', // lowercase
       'TokenToCharge.Token': tokenData.token,
       'TokenToCharge.CardValidityMonth': tokenData.card_last_four ? tokenExpiry.getMonth().toString().padStart(2, '0') : '12',
       'TokenToCharge.CardValidityYear': tokenExpiry.getFullYear().toString(),
       'TokenToCharge.SumToBill': (amount / 100).toFixed(2), // Convert from agorot to shekels
-      'TokenToCharge.JParameter': '5',
-      'TokenToCharge.APILevel': '10'
+      'TokenToCharge.JParameter': '5'
     })
 
     console.log('Charging token for user:', userId, 'Amount:', amount)
@@ -76,6 +77,12 @@ serve(async (req) => {
 
     const responseText = await response.text()
     console.log('CardCom ChargeToken response:', responseText)
+
+    // Check if CardCom returned HTML error page
+    if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+      console.error('CardCom returned HTML error page for token charge')
+      throw new Error('Bad CardCom parameters for token charge - received HTML error page')
+    }
 
     // Parse response (usually XML or form data)
     const isSuccess = responseText.includes('ResponseCode>0<') || responseText.includes('ResponseCode=0')

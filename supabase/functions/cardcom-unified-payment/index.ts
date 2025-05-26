@@ -76,37 +76,39 @@ serve(async (req) => {
       email: email
     })
 
+    // Ensure HTTPS URLs as required by CardCom
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/cardcom-webhook-unified`
     const successUrl = `${origin}/payment/success`
     const errorUrl = `${origin}/payment/failed`
 
-    // Prepare CardCom API payload according to official documentation
+    // Prepare CardCom API payload with CORRECT LOWERCASE parameters according to official documentation
     const formData = new URLSearchParams({
-      'Operation': planDetails.operationType.toString(),
-      'TerminalNumber': terminalNumber,
-      'UserName': userName,
-      'SumToBill': (planDetails.amount / 100).toFixed(2), // Convert from agorot to shekels
-      'CoinID': '1', // ILS
-      'Language': 'he',
-      'ProductName': `AlgoTouch ${getPlanName(planId)}`,
-      'APILevel': '10',
-      'Codepage': '65001',
-      'SuccessRedirectUrl': successUrl,
-      'ErrorRedirectUrl': errorUrl,
-      'IndicatorUrl': webhookUrl,
-      'ReturnValue': tempRegistrationId,
-      'AutoRedirect': 'true'
+      'operation': planDetails.operationType.toString(), // lowercase
+      'terminalnumber': terminalNumber, // lowercase
+      'username': userName, // lowercase
+      'sumtobill': (planDetails.amount / 100).toFixed(2), // Convert from agorot to shekels
+      'coinid': '1', // lowercase - ILS
+      'language': 'he',
+      'productname': `AlgoTouch ${getPlanName(planId)}`,
+      'apilevel': '10', // lowercase
+      'codepage': '65001', // Required for UTF-8 support
+      'successredirecturl': successUrl, // lowercase
+      'errorredirecturl': errorUrl, // lowercase
+      'indicatorurl': webhookUrl, // lowercase
+      'returnvalue': tempRegistrationId, // lowercase
+      'autoredirect': 'true' // lowercase
     })
 
-    console.log('Sending CardCom request to LowProfile.aspx:', {
+    console.log('Sending CardCom request to LowProfile.aspx with corrected parameters:', {
       operation: planDetails.operationType,
       amount: (planDetails.amount / 100).toFixed(2),
       email: email,
       webhookUrl: webhookUrl,
-      terminalNumber: terminalNumber
+      terminalNumber: terminalNumber,
+      parametersCorrect: 'All lowercase as per CardCom docs'
     })
 
-    // Call CardCom LowProfile API according to documentation
+    // Call CardCom LowProfile API with correct Content-Type
     const response = await fetch('https://secure.cardcom.solutions/Interface/LowProfile.aspx', {
       method: 'POST',
       headers: {
@@ -122,17 +124,26 @@ serve(async (req) => {
     const responseText = await response.text()
     console.log('CardCom LowProfile response:', responseText)
 
-    // Parse the HTML response to extract the payment URL
-    const urlMatch = responseText.match(/url=([^"'>\s]+)/i)
-    if (!urlMatch) {
-      console.error('Could not extract URL from CardCom response:', responseText)
-      throw new Error('Invalid response from CardCom - no URL found')
+    // Check if CardCom returned HTML error page instead of URL
+    if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+      console.error('CardCom returned HTML error page - parameter issue detected')
+      throw new Error('Bad CardCom parameters - received HTML error page instead of payment URL')
     }
 
-    const paymentUrl = urlMatch[1]
-    console.log(`Created CardCom payment session with URL: ${paymentUrl}`)
+    // Parse the Name-Value response correctly
+    const responseParams = new URLSearchParams(responseText)
+    const paymentUrl = responseParams.get('url')
+    const lowProfileCode = responseParams.get('lowprofilecode')
 
-    // Save payment session to database
+    if (!paymentUrl) {
+      console.error('Could not extract URL from CardCom response:', responseText)
+      throw new Error('Invalid response from CardCom - no payment URL found')
+    }
+
+    console.log(`Created CardCom payment session with URL: ${paymentUrl}`)
+    console.log(`LowProfile Code: ${lowProfileCode}`)
+
+    // Save payment session to database with lowProfileCode
     try {
       const { error: sessionError } = await supabase
         .from('payment_sessions')
@@ -144,6 +155,7 @@ serve(async (req) => {
           currency: 'ILS',
           status: 'initiated',
           low_profile_id: tempRegistrationId,
+          low_profile_code: lowProfileCode, // Store for tracking
           operation_type: getOperationName(planDetails.operationType),
           expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           payment_details: {
@@ -178,6 +190,7 @@ serve(async (req) => {
             id: tempRegistrationId,
             registration_data: registrationData,
             payment_session_id: tempRegistrationId,
+            low_profile_code: lowProfileCode,
             expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
             step_completed: 'payment_initiated'
           })
@@ -194,6 +207,7 @@ serve(async (req) => {
         success: true,
         url: paymentUrl,
         sessionId: tempRegistrationId,
+        lowProfileCode: lowProfileCode,
         operationType: planDetails.operationType,
         amount: planDetails.amount
       }),
