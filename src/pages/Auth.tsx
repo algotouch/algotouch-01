@@ -9,8 +9,17 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { ReactErrorBoundary } from '@/components/ReactErrorBoundary';
+import { monitorReactHooks, checkReactHookHealth } from '@/lib/reactDebugger';
 
 const Auth = () => {
+  // Add React debugging
+  useEffect(() => {
+    console.log('Auth: Component mounting, checking React environment');
+    monitorReactHooks();
+    checkReactHookHealth();
+  }, []);
+
   const { 
     isAuthenticated, 
     loading, 
@@ -134,41 +143,43 @@ const Auth = () => {
   }
 
   return (
-    <ErrorBoundary fallback={
-      <div className="flex min-h-screen items-center justify-center bg-red-50 dark:bg-red-900/20 p-4">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">שגיאה בטעינת עמוד ההתחברות</h2>
-          <p className="mb-4">אירעה שגיאה בטעינת העמוד. אנא נסה שוב מאוחר יותר.</p>
-          <button 
-            onClick={() => navigate('/auth-error')} 
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors"
-          >
-            פרטי שגיאה
-          </button>
+    <ReactErrorBoundary fallbackMessage="שגיאה בטעינת דף ההתחברות">
+      <ErrorBoundary fallback={
+        <div className="flex min-h-screen items-center justify-center bg-red-50 dark:bg-red-900/20 p-4">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">שגיאה בטעינת עמוד ההתחברות</h2>
+            <p className="mb-4">אירעה שגיאה בטעינת העמוד. אנא נסה שוב מאוחר יותר.</p>
+            <button 
+              onClick={() => navigate('/auth-error')} 
+              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors"
+            >
+              פרטי שגיאה
+            </button>
+          </div>
         </div>
-      </div>
-    }>
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-gradient-to-br from-background to-background/90 p-4 dark:bg-background dark:text-foreground" dir="rtl">
-        <div className="w-full max-w-md space-y-6">
-          <AuthHeader />
-          
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'signup')} defaultValue="login">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="signup">הרשמה</TabsTrigger>
-              <TabsTrigger value="login">התחברות</TabsTrigger>
-            </TabsList>
+      }>
+        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-gradient-to-br from-background to-background/90 p-4 dark:bg-background dark:text-foreground" dir="rtl">
+          <div className="w-full max-w-md space-y-6">
+            <AuthHeader />
             
-            <TabsContent value="login">
-              <LoginForm />
-            </TabsContent>
-            
-            <TabsContent value="signup">
-              <SignupForm onSwitchToLogin={handleSwitchToLogin} />
-            </TabsContent>
-          </Tabs>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'signup')} defaultValue="login">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="signup">הרשמה</TabsTrigger>
+                <TabsTrigger value="login">התחברות</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login">
+                <LoginForm />
+              </TabsContent>
+              
+              <TabsContent value="signup">
+                <SignupForm onSwitchToLogin={handleSwitchToLogin} />
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
-      </div>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ReactErrorBoundary>
   );
 };
 
