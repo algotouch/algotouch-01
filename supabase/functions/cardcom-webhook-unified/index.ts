@@ -18,241 +18,232 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Parse webhook parameters from URL or body
-    const url = new URL(req.url)
-    const params = Object.fromEntries(url.searchParams.entries())
+    // Parse the form data from Cardcom webhook
+    const formData = await req.formData()
+    const webhookData: any = {}
     
-    console.log('CardCom webhook received:', params)
+    for (const [key, value] of formData.entries()) {
+      webhookData[key] = value
+    }
+
+    console.log('Received Cardcom webhook:', webhookData)
 
     const {
-      LowProfileCode,
-      Operation,
-      OperationResponse,
-      DealResponse,
-      TokenResponse,
+      ResponseCode,
       Token,
       TokenExDate,
-      InternalDealNumber,
+      CardValidityYear,
+      CardValidityMonth,
+      TokenApprovalNumber,
+      CardOwnerID,
       ReturnValue,
-      CardOwnerName,
-      CardOwnerEmail,
-      CardNumber // Masked card number
-    } = params
+      TranzactionId,
+      LastDigits,
+      AbroadCard,
+      VoucherNumber,
+      SumToBill
+    } = webhookData
 
-    // Validate essential parameters
-    if (!LowProfileCode || !ReturnValue) {
-      console.error('Missing essential webhook parameters')
-      return new Response('Missing parameters', { status: 400 })
-    }
-
-    // Check if already processed
-    const { data: existingSession } = await supabase
-      .from('payment_sessions')
-      .select('*')
-      .eq('low_profile_id', LowProfileCode)
-      .single()
-
-    if (!existingSession) {
-      console.error('Payment session not found for LowProfileCode:', LowProfileCode)
-      return new Response('Session not found', { status: 404 })
-    }
-
-    if (existingSession.status !== 'initiated') {
-      console.log('Payment already processed:', LowProfileCode)
-      return new Response('OK', { status: 200 })
-    }
-
-    const isSuccess = OperationResponse === '0'
-    const isDealSuccess = !DealResponse || DealResponse === '0'
-    const isTokenSuccess = !TokenResponse || TokenResponse === '0'
-
-    console.log('Payment status:', {
-      isSuccess,
-      isDealSuccess,
-      isTokenSuccess,
-      operation: Operation
-    })
-
-    if (!isSuccess) {
-      // Mark as failed
-      await supabase
-        .from('payment_sessions')
-        .update({ 
-          status: 'failed',
-          transaction_data: params
-        })
-        .eq('low_profile_id', LowProfileCode)
-
-      console.log('Payment failed:', OperationResponse)
-      return new Response('OK', { status: 200 })
-    }
-
-    // Payment succeeded - process based on user type
-    let userId = existingSession.user_id
-    
-    // Handle guest users - create account first
-    if (!userId && existingSession.anonymous_data) {
-      try {
-        // Get registration data
-        const { data: tempReg } = await supabase
-          .from('temp_registration_data')
-          .select('*')
-          .eq('id', ReturnValue)
-          .single()
-
-        if (tempReg && tempReg.registration_data) {
-          const regData = tempReg.registration_data
-          
-          // Create user account
-          const { data: userData, error: userError } = await supabase.auth.admin.createUser({
-            email: regData.email,
-            password: regData.password,
-            email_confirm: true,
-            user_metadata: {
-              first_name: regData.userData?.firstName,
-              last_name: regData.userData?.lastName,
-              registration_complete: true
-            }
-          })
-
-          if (userError) {
-            console.error('Error creating user:', userError)
-            throw userError
-          }
-
-          userId = userData.user.id
-          console.log('Created new user:', userId)
-
-          // Update profiles table
-          await supabase
-            .from('profiles')
-            .upsert({
-              id: userId,
-              first_name: regData.userData?.firstName,
-              last_name: regData.userData?.lastName,
-              phone: regData.userData?.phone
-            })
-
-          // Mark temp registration as used
-          await supabase
-            .from('temp_registration_data')
-            .update({ used: true })
-            .eq('id', ReturnValue)
-        }
-      } catch (error) {
-        console.error('Error creating user account:', error)
-        // Continue with payment processing even if user creation fails
-      }
-    }
-
-    // Create subscription based on plan type
-    const planDetails = existingSession.payment_details
-    const planType = existingSession.plan_id
-    
-    let subscriptionData: any = {
-      id: crypto.randomUUID(),
-      user_id: userId,
-      plan_type: planType,
-      plan_id: planType,
-      status: planDetails.hasTrial ? 'trial' : 'active',
-      created_at: new Date().toISOString(),
-      contract_signed: true,
-      contract_signed_at: new Date().toISOString()
-    }
-
-    // Handle trial periods
-    if (planDetails.hasTrial) {
-      const trialEnd = new Date()
-      trialEnd.setDate(trialEnd.getDate() + (planDetails.trialDays || 30))
-      subscriptionData.trial_ends_at = trialEnd.toISOString()
-      subscriptionData.next_charge_at = trialEnd.toISOString()
-    } else if (planType === 'annual') {
-      const nextCharge = new Date()
-      nextCharge.setFullYear(nextCharge.getFullYear() + 1)
-      subscriptionData.next_charge_at = nextCharge.toISOString()
-    }
-    // VIP has no next charge date
-
-    // Save token information if received
-    if (Token && isTokenSuccess) {
-      subscriptionData.token = Token
-      if (TokenExDate) {
-        // Convert YYYYMMDD to YYYY-MM format
-        const year = TokenExDate.substring(0, 4)
-        const month = TokenExDate.substring(4, 6)
-        subscriptionData.token_expires_ym = `${month}/${year.substring(2)}`
-      }
-      
-      // Save payment method info
-      subscriptionData.payment_method = {
-        token: Token,
-        lastFourDigits: CardNumber ? CardNumber.slice(-4) : '****',
-        cardholderName: CardOwnerName || '',
-        expiryMonth: TokenExDate ? TokenExDate.substring(4, 6) : '',
-        expiryYear: TokenExDate ? TokenExDate.substring(0, 4) : ''
-      }
-
-      // Create recurring payment record if token created
-      await supabase
-        .from('recurring_payments')
-        .insert({
-          id: crypto.randomUUID(),
-          user_id: userId,
-          token: Token,
-          token_expiry: TokenExDate ? 
-            `${TokenExDate.substring(0, 4)}-${TokenExDate.substring(4, 6)}-01` : 
-            new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toISOString().split('T')[0],
-          last_4_digits: CardNumber ? CardNumber.slice(-4) : '****',
-          status: 'active',
-          is_valid: true
-        })
-    }
-
-    // Create subscription
-    const { error: subError } = await supabase
-      .from('subscriptions')
-      .insert(subscriptionData)
-
-    if (subError) {
-      console.error('Error creating subscription:', subError)
-      throw subError
-    }
-
-    // Log the payment
-    await supabase
-      .from('user_payment_logs')
+    // Save the webhook data
+    const { error: webhookError } = await supabase
+      .from('payment_webhooks')
       .insert({
         id: crypto.randomUUID(),
-        user_id: userId,
-        subscription_id: subscriptionData.id,
-        amount: existingSession.amount,
-        currency: existingSession.currency,
-        status: 'payment_success',
-        transaction_id: InternalDealNumber || LowProfileCode,
-        token: Token || LowProfileCode,
-        payment_data: {
-          lowProfileCode: LowProfileCode,
-          operationType: existingSession.operation_type,
-          cardcomDealId: InternalDealNumber,
-          planType: planType
-        }
+        payload: webhookData,
+        processed: false,
+        created_at: new Date().toISOString()
       })
 
-    // Mark session as completed
-    await supabase
-      .from('payment_sessions')
-      .update({ 
-        status: 'completed',
-        transaction_data: params,
-        transaction_id: InternalDealNumber
-      })
-      .eq('low_profile_id', LowProfileCode)
+    if (webhookError) {
+      console.error('Error saving webhook:', webhookError)
+    }
 
-    console.log('Payment processed successfully for user:', userId)
-    return new Response('OK', { status: 200, headers: corsHeaders })
+    // Check if payment was successful
+    const isSuccess = ResponseCode === '0'
+    console.log('Payment success status:', isSuccess, 'ResponseCode:', ResponseCode)
+
+    if (isSuccess && Token && ReturnValue) {
+      // Process successful payment
+      await processSuccessfulPayment({
+        supabase,
+        token: Token,
+        tokenExDate: TokenExDate,
+        cardValidityYear: CardValidityYear,
+        cardValidityMonth: CardValidityMonth,
+        tokenApprovalNumber: TokenApprovalNumber,
+        cardOwnerID: CardOwnerID,
+        returnValue: ReturnValue,
+        transactionId: TranzactionId,
+        lastDigits: LastDigits,
+        sumToBill: SumToBill,
+        webhookData
+      })
+
+      // Mark webhook as processed
+      await supabase
+        .from('payment_webhooks')
+        .update({ processed: true })
+        .eq('payload->>ReturnValue', ReturnValue)
+
+      console.log('Payment processed successfully for:', ReturnValue)
+    } else {
+      console.error('Payment failed:', {
+        ResponseCode,
+        ReturnValue,
+        hasToken: !!Token
+      })
+    }
+
+    return new Response('OK', {
+      headers: corsHeaders,
+      status: 200
+    })
 
   } catch (error) {
     console.error('Webhook processing error:', error)
-    return new Response('Error', { status: 500, headers: corsHeaders })
+    return new Response('Error', {
+      headers: corsHeaders,
+      status: 500
+    })
   }
 })
+
+async function processSuccessfulPayment({
+  supabase,
+  token,
+  tokenExDate,
+  cardValidityYear,
+  cardValidityMonth,
+  tokenApprovalNumber,
+  cardOwnerID,
+  returnValue,
+  transactionId,
+  lastDigits,
+  sumToBill,
+  webhookData
+}: any) {
+  try {
+    // Get payment session details
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('payment_sessions')
+      .select('*')
+      .eq('low_profile_id', returnValue)
+      .single()
+
+    if (sessionError) {
+      console.error('Error fetching payment session:', sessionError)
+      return
+    }
+
+    const { user_id, plan_id, payment_details } = sessionData
+
+    // Create token data object
+    const tokenData = {
+      token: token,
+      lastFourDigits: lastDigits || '',
+      expiryMonth: cardValidityMonth || '',
+      expiryYear: cardValidityYear || '',
+      cardholderName: payment_details?.userDetails?.fullName || '',
+      cardType: 'unknown',
+      approvalNumber: tokenApprovalNumber
+    }
+
+    if (user_id) {
+      // Handle existing user payment
+      await handleExistingUserPayment(supabase, user_id, plan_id, tokenData, payment_details)
+    } else {
+      // Handle guest registration
+      await handleGuestRegistration(supabase, returnValue, tokenData, webhookData)
+    }
+
+    // Update payment session
+    await supabase
+      .from('payment_sessions')
+      .update({
+        status: 'completed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('low_profile_id', returnValue)
+
+  } catch (error) {
+    console.error('Error processing successful payment:', error)
+  }
+}
+
+async function handleExistingUserPayment(supabase: any, userId: string, planId: string, tokenData: any, paymentDetails: any) {
+  const now = new Date()
+  let trialEndsAt = null
+  let periodEndsAt = null
+  
+  if (planId === 'monthly') {
+    trialEndsAt = new Date(now)
+    trialEndsAt.setMonth(trialEndsAt.getMonth() + 1)
+  } else if (planId === 'annual') {
+    periodEndsAt = new Date(now)
+    periodEndsAt.setFullYear(periodEndsAt.getFullYear() + 1)
+  }
+
+  // Update user subscription
+  await supabase
+    .from('subscriptions')
+    .upsert({
+      user_id: userId,
+      plan_type: planId,
+      status: planId === 'monthly' ? 'trial' : 'active',
+      trial_ends_at: trialEndsAt?.toISOString() || null,
+      current_period_ends_at: periodEndsAt?.toISOString() || null,
+      payment_method: tokenData,
+      contract_signed: true,
+      contract_signed_at: now.toISOString()
+    })
+
+  // Store payment token for future recurring charges
+  if (tokenData.token) {
+    await supabase
+      .from('payment_tokens')
+      .insert({
+        user_id: userId,
+        token: tokenData.token.toString(),
+        token_expiry: `${tokenData.expiryYear}-${tokenData.expiryMonth}-01`,
+        card_last_four: tokenData.lastFourDigits,
+        is_active: true
+      })
+  }
+
+  console.log('Updated subscription for existing user:', userId)
+}
+
+async function handleGuestRegistration(supabase: any, returnValue: string, tokenData: any, webhookData: any) {
+  // Get temporary registration data
+  const { data: tempData, error: tempError } = await supabase
+    .from('temp_registration_data')
+    .select('*')
+    .eq('id', returnValue)
+    .single()
+
+  if (tempError || !tempData) {
+    console.error('Could not find temp registration data:', tempError)
+    return
+  }
+
+  // Register the user
+  const { data, error } = await supabase.functions.invoke('register-user', {
+    body: {
+      registrationData: tempData.registration_data,
+      tokenData: tokenData,
+      contractDetails: tempData.registration_data?.contractDetails || null
+    }
+  })
+
+  if (error) {
+    console.error('Error registering guest user:', error)
+  } else {
+    console.log('Successfully registered guest user:', data?.userId)
+    
+    // Clean up temp data
+    await supabase
+      .from('temp_registration_data')
+      .delete()
+      .eq('id', returnValue)
+  }
+}

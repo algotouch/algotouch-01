@@ -15,14 +15,14 @@ const PaymentIframe: React.FC<PaymentIframeProps> = ({
   onSuccess, 
   onError 
 }) => {
-  const [iframeHeight, setIframeHeight] = useState(650);
+  const [iframeHeight, setIframeHeight] = useState(700);
   
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
-        setIframeHeight(700);
+        setIframeHeight(750);
       } else {
-        setIframeHeight(650);
+        setIframeHeight(700);
       }
     };
     
@@ -32,22 +32,36 @@ const PaymentIframe: React.FC<PaymentIframeProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Listen for messages from the iframe
+  // Listen for navigation events that indicate payment completion
   useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'payment_success_data' && e.newValue) {
+        try {
+          const paymentData = JSON.parse(e.newValue);
+          console.log('Payment completed via storage event:', paymentData);
+          toast.success('התשלום התקבל בהצלחה!');
+          
+          if (onSuccess) {
+            onSuccess(paymentData);
+          }
+        } catch (error) {
+          console.error('Error parsing payment success data:', error);
+        }
+      }
+    };
+
+    // Listen for cross-window communication
     const handleMessage = (event: MessageEvent) => {
-      // For security, we should validate the origin, but for now we're using '*' in postMessage
       console.log('Received message from iframe:', event.data);
       
-      if (event.data?.type === 'cardcom-paid') {
-        // Payment successful
+      if (event.data?.type === 'payment-success') {
         console.log('Payment successful:', event.data.details);
         toast.success('התשלום התקבל בהצלחה!');
         
         if (onSuccess) {
           onSuccess(event.data.details);
         }
-      } else if (event.data?.type === 'cardcom-error') {
-        // Payment failed
+      } else if (event.data?.type === 'payment-error') {
         console.error('Payment error:', event.data.message);
         toast.error('שגיאה בתהליך התשלום: ' + (event.data.message || 'אנא נסה שנית'));
         
@@ -57,8 +71,38 @@ const PaymentIframe: React.FC<PaymentIframeProps> = ({
       }
     };
 
+    // Check for payment completion periodically
+    const checkPaymentStatus = () => {
+      const paymentData = sessionStorage.getItem('payment_success_data');
+      if (paymentData) {
+        try {
+          const data = JSON.parse(paymentData);
+          console.log('Payment completion detected:', data);
+          toast.success('התשלום התקבל בהצלחה!');
+          
+          // Clear the data to prevent multiple triggers
+          sessionStorage.removeItem('payment_success_data');
+          
+          if (onSuccess) {
+            onSuccess(data);
+          }
+        } catch (error) {
+          console.error('Error parsing payment data:', error);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    
+    // Check every 2 seconds for payment completion
+    const checkInterval = setInterval(checkPaymentStatus, 2000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('message', handleMessage);
+      clearInterval(checkInterval);
+    };
   }, [onSuccess, onError]);
 
   if (!paymentUrl) return null;
@@ -90,7 +134,7 @@ const PaymentIframe: React.FC<PaymentIframeProps> = ({
           </div>
         </div>
         
-        {/* Enhanced iframe container with shadow and border */}
+        {/* Enhanced iframe container */}
         <div className="relative bg-gradient-to-b from-primary/5 to-transparent p-4 sm:p-6">
           <div className="relative rounded-lg overflow-hidden border-2 border-primary/20 shadow-xl hover:shadow-2xl transition-shadow duration-300">
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background/5 pointer-events-none"></div>
@@ -101,6 +145,8 @@ const PaymentIframe: React.FC<PaymentIframeProps> = ({
               frameBorder="0"
               title="Cardcom Payment Form"
               className="w-full"
+              allow="payment"
+              sandbox="allow-forms allow-scripts allow-same-origin allow-top-navigation allow-popups"
             />
           </div>
         </div>

@@ -57,10 +57,9 @@ serve(async (req) => {
 
     // Get CardCom credentials
     const terminalNumber = Deno.env.get('CARDCOM_TERMINAL_NUMBER')
-    const apiName = Deno.env.get('CARDCOM_API_NAME')
-    const apiPassword = Deno.env.get('CARDCOM_API_PASSWORD')
+    const userName = Deno.env.get('CARDCOM_USERNAME')
 
-    if (!terminalNumber || !apiName || !apiPassword) {
+    if (!terminalNumber || !userName) {
       throw new Error('CardCom credentials not configured')
     }
 
@@ -78,59 +77,60 @@ serve(async (req) => {
     })
 
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/cardcom-webhook-unified`
+    const successUrl = `${origin}/payment/success`
+    const errorUrl = `${origin}/payment/failed`
 
-    // Prepare CardCom API payload
-    const cardcomPayload = {
-      TerminalNumber: terminalNumber,
-      ApiName: apiName,
-      APIPassword: apiPassword,
-      CoinId: 1, // ILS
-      SumToBill: planDetails.amount,
-      Operation: planDetails.operationType,
-      ReturnValue: tempRegistrationId,
-      SuccessRedirectUrl: `${origin}/payment/success`,
-      ErrorRedirectUrl: `${origin}/payment/failed`, 
-      CancelRedirectUrl: `${origin}/subscription`,
-      WebHookUrl: webhookUrl,
-      MaxNumOfPayments: 1,
-      UseCardholderName: true,
-      CardOwnerName: userDetails?.fullName || fullName || '',
-      CardOwnerEmail: userDetails?.email || email || '',
-      CardOwnerPhone: userDetails?.phone || phone || '',
-      CardOwnerID: userDetails?.idNumber || idNumber || '',
-      Language: "he",
-      UTF8: true
-    }
-
-    console.log('Sending CardCom payload:', {
-      operation: getOperationName(planDetails.operationType),
-      amount: planDetails.amount,
-      email: cardcomPayload.CardOwnerEmail,
-      webhookUrl: webhookUrl
+    // Prepare CardCom API payload according to official documentation
+    const formData = new URLSearchParams({
+      'Operation': planDetails.operationType.toString(),
+      'TerminalNumber': terminalNumber,
+      'UserName': userName,
+      'SumToBill': (planDetails.amount / 100).toFixed(2), // Convert from agorot to shekels
+      'CoinID': '1', // ILS
+      'Language': 'he',
+      'ProductName': `AlgoTouch ${getPlanName(planId)}`,
+      'APILevel': '10',
+      'Codepage': '65001',
+      'SuccessRedirectUrl': successUrl,
+      'ErrorRedirectUrl': errorUrl,
+      'IndicatorUrl': webhookUrl,
+      'ReturnValue': tempRegistrationId,
+      'AutoRedirect': 'true'
     })
 
-    // Call CardCom API
-    const response = await fetch('https://secure.cardcom.solutions/api/v11/LowProfile/Create', {
+    console.log('Sending CardCom request to LowProfile.aspx:', {
+      operation: planDetails.operationType,
+      amount: (planDetails.amount / 100).toFixed(2),
+      email: email,
+      webhookUrl: webhookUrl,
+      terminalNumber: terminalNumber
+    })
+
+    // Call CardCom LowProfile API according to documentation
+    const response = await fetch('https://secure.cardcom.solutions/Interface/LowProfile.aspx', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: JSON.stringify(cardcomPayload)
+      body: formData.toString()
     })
 
     if (!response.ok) {
       throw new Error(`CardCom API returned ${response.status}: ${response.statusText}`)
     }
 
-    const cardcomResponse = await response.json()
-    console.log('CardCom response:', cardcomResponse)
+    const responseText = await response.text()
+    console.log('CardCom LowProfile response:', responseText)
 
-    if (cardcomResponse.ResponseCode !== 0) {
-      throw new Error(`CardCom error (${cardcomResponse.ResponseCode}): ${cardcomResponse.Description || 'Unknown error'}`)
+    // Parse the HTML response to extract the payment URL
+    const urlMatch = responseText.match(/url=([^"'>\s]+)/i)
+    if (!urlMatch) {
+      console.error('Could not extract URL from CardCom response:', responseText)
+      throw new Error('Invalid response from CardCom - no URL found')
     }
 
-    const lowProfileId = cardcomResponse.LowProfileId
-    console.log(`Created CardCom payment session: ${lowProfileId}`)
+    const paymentUrl = urlMatch[1]
+    console.log(`Created CardCom payment session with URL: ${paymentUrl}`)
 
     // Save payment session to database
     try {
@@ -143,7 +143,7 @@ serve(async (req) => {
           amount: planDetails.amount,
           currency: 'ILS',
           status: 'initiated',
-          low_profile_id: lowProfileId,
+          low_profile_id: tempRegistrationId,
           operation_type: getOperationName(planDetails.operationType),
           expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           payment_details: {
@@ -177,7 +177,7 @@ serve(async (req) => {
           .insert({
             id: tempRegistrationId,
             registration_data: registrationData,
-            payment_session_id: lowProfileId,
+            payment_session_id: tempRegistrationId,
             expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
             step_completed: 'payment_initiated'
           })
@@ -192,8 +192,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        url: cardcomResponse.URL,
-        lowProfileId: lowProfileId,
+        url: paymentUrl,
         sessionId: tempRegistrationId,
         operationType: planDetails.operationType,
         amount: planDetails.amount
@@ -225,7 +224,7 @@ function getPlanDetails(planId: string): PlanDetails {
       return {
         operationType: 2, // ChargeAndCreateToken - charge 1₪ first month + token
         amount: 100, // 1₪ for card validation (in agorot)
-        hasTrial: false, // No trial, just reduced first payment
+        hasTrial: false,
         recurringAmount: 37100 // 371₪ for subsequent months
       };
     case 'annual':
@@ -246,6 +245,15 @@ function getPlanDetails(planId: string): PlanDetails {
         amount: 100,
         hasTrial: false
       };
+  }
+}
+
+function getPlanName(planId: string): string {
+  switch (planId) {
+    case 'monthly': return 'Monthly Subscription'
+    case 'annual': return 'Annual Subscription'
+    case 'vip': return 'VIP Lifetime'
+    default: return 'Subscription'
   }
 }
 
