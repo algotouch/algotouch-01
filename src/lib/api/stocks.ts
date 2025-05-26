@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 
 export interface StockData {
   symbol: string;
@@ -48,4 +49,81 @@ export const fetchStockIndices = async (): Promise<StockData[]> => {
   }));
   
   return updatedStocks;
+};
+
+export interface StockDataState {
+  data: StockData[];
+  isLoading: boolean;
+  error: Error | null;
+}
+
+export const useStockDataWithRefresh = (refreshInterval: number = 30000): StockDataState => {
+  const [state, setState] = useState<StockDataState>({
+    data: [],
+    isLoading: true,
+    error: null
+  });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await fetchStockIndices();
+      setState(prev => ({
+        ...prev,
+        data,
+        isLoading: false,
+        error: null
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error : new Error('Failed to fetch stock data')
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let intervalId: NodeJS.Timeout;
+
+    const safeSetState = (updater: (prev: StockDataState) => StockDataState) => {
+      if (isMounted) {
+        setState(updater);
+      }
+    };
+
+    const fetchDataSafely = async () => {
+      try {
+        const data = await fetchStockIndices();
+        safeSetState(prev => ({
+          ...prev,
+          data,
+          isLoading: false,
+          error: null
+        }));
+      } catch (error) {
+        safeSetState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error : new Error('Failed to fetch stock data')
+        }));
+      }
+    };
+
+    // Initial fetch
+    fetchDataSafely();
+
+    // Set up refresh interval
+    intervalId = setInterval(fetchDataSafely, refreshInterval);
+
+    // Cleanup
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [refreshInterval, fetchData]);
+
+  return state;
 };

@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface Post {
@@ -35,4 +34,4 @@ const PostList: React.FC<PostListProps> = ({ posts }) => {
   );
 };
 
-export default PostList;
+export { PostList };

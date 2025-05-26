@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export interface ContractData {
@@ -71,6 +70,54 @@ class ContractService {
       throw error;
     }
   }
+
+  async getContractById(id: string): Promise<ContractData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('contract_signatures')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      return data as ContractData;
+    } catch (error) {
+      console.error('Error fetching contract:', error);
+      return null;
+    }
+  }
+
+  async verifyContractSignature(contractId: string, signature: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('contract_signatures')
+        .select('signature')
+        .eq('id', contractId)
+        .single();
+
+      if (error) throw error;
+      return data?.signature === signature;
+    } catch (error) {
+      console.error('Error verifying signature:', error);
+      return false;
+    }
+  }
+
+  async processSignedContract(contractData: Omit<ContractData, 'id' | 'createdAt'>): Promise<string> {
+    try {
+      const contractId = await this.saveContract(contractData);
+      // Additional processing logic can be added here
+      return contractId;
+    } catch (error) {
+      console.error('Error processing signed contract:', error);
+      throw error;
+    }
+  }
 }
 
 export const contractService = new ContractService();
+
+// Export individual functions for direct import
+export const getContractById = contractService.getContractById.bind(contractService);
+export const verifyContractSignature = contractService.verifyContractSignature.bind(contractService);
+export const processSignedContract = contractService.processSignedContract.bind(contractService);
