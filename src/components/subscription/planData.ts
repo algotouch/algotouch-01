@@ -22,16 +22,15 @@ export const getPlansData = (): Plan[] => {
     {
       id: 'monthly',
       name: 'מסלול חודשי',
-      price: 371,
+      price: 1,
       currency: '₪',
-      billingPeriod: 'לחודש',
-      description: 'ללא התחייבות: תתחיל, תתנסה, תחליט לפי התוצאות.',
+      billingPeriod: 'חודש ראשון',
+      description: 'חודש ראשון 1₪ לבדיקת הכרטיס, אחר כך 371₪ לחודש',
       icon: null,
-      operationType: 3, // CreateTokenOnly - trial first, then recurring
-      hasTrial: true,
-      trialDays: 30,
+      operationType: 2, // ChargeAndCreateToken - charge 1₪ + token
+      hasTrial: false,
       features: [
-        { name: 'תקופת ניסיון 30 יום חינם', icon: '🎁', description: 'בלי חיוב עד תום תקופת הניסיון.', included: true },
+        { name: 'חודש ראשון במחיר סמלי 1₪', icon: '🎁', description: 'בדיקת תקינות הכרטיס בלבד, אחר כך 371₪ לחודש.', included: true },
         { name: 'מדריך הפעלה ברור ומדוייק', icon: '💡', description: 'בלי למידה מורכבת, כל מה שצריך לדעת כדי להתחיל לעבוד.', included: true },
         { name: 'עוזר אישי AI זמין 24/7', icon: '🤖', description: 'הכוונה מדויקת, תובנות חכמות ותמיכה בזמן אמת.', included: true },
         { name: 'בלוג מקצועי', icon: '🧠', description: 'מאמרים, סקירות עומק ועדכונים שיעזרו לך לקבל החלטות מושכלות יותר.', included: true },

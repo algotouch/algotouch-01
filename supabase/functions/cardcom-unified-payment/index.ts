@@ -64,7 +64,7 @@ serve(async (req) => {
       throw new Error('CardCom credentials not configured')
     }
 
-    // Get plan details with correct operation types and amounts
+    // Get plan details with updated pricing strategy
     const planDetails = getPlanDetails(planId)
     
     // Generate unique return value for tracking
@@ -79,14 +79,14 @@ serve(async (req) => {
 
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/cardcom-webhook-unified`
 
-    // Prepare CardCom API payload with correct operation type
+    // Prepare CardCom API payload
     const cardcomPayload = {
       TerminalNumber: terminalNumber,
       ApiName: apiName,
       APIPassword: apiPassword,
       CoinId: 1, // ILS
-      SumToBill: planDetails.amount, // Correct amount based on plan
-      Operation: planDetails.operationType, // Correct operation type
+      SumToBill: planDetails.amount,
+      Operation: planDetails.operationType,
       ReturnValue: tempRegistrationId,
       SuccessRedirectUrl: `${origin}/payment/success`,
       ErrorRedirectUrl: `${origin}/payment/failed`, 
@@ -94,12 +94,10 @@ serve(async (req) => {
       WebHookUrl: webhookUrl,
       MaxNumOfPayments: 1,
       UseCardholderName: true,
-      // Pre-fill user details
       CardOwnerName: userDetails?.fullName || fullName || '',
       CardOwnerEmail: userDetails?.email || email || '',
       CardOwnerPhone: userDetails?.phone || phone || '',
       CardOwnerID: userDetails?.idNumber || idNumber || '',
-      // Set language to Hebrew
       Language: "he",
       UTF8: true
     }
@@ -112,7 +110,7 @@ serve(async (req) => {
     })
 
     // Call CardCom API
-    const response = await fetch('https://secure.cardcom.solutions/api/v1/LowProfile/Create', {
+    const response = await fetch('https://secure.cardcom.solutions/api/v11/LowProfile/Create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -147,7 +145,7 @@ serve(async (req) => {
           status: 'initiated',
           low_profile_id: lowProfileId,
           operation_type: getOperationName(planDetails.operationType),
-          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           payment_details: {
             operationType: planDetails.operationType,
             planId,
@@ -180,7 +178,7 @@ serve(async (req) => {
             id: tempRegistrationId,
             registration_data: registrationData,
             payment_session_id: lowProfileId,
-            expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours
+            expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
             step_completed: 'payment_initiated'
           })
         
@@ -225,28 +223,27 @@ function getPlanDetails(planId: string): PlanDetails {
   switch (planId) {
     case 'monthly':
       return {
-        operationType: 3, // CreateTokenOnly - trial first
-        amount: 0, // No charge during trial
-        hasTrial: true,
-        trialDays: 30,
-        recurringAmount: 371
+        operationType: 2, // ChargeAndCreateToken - charge 1₪ first month + token
+        amount: 100, // 1₪ for card validation (in agorot)
+        hasTrial: false, // No trial, just reduced first payment
+        recurringAmount: 37100 // 371₪ for subsequent months
       };
     case 'annual':
       return {
         operationType: 2, // ChargeAndCreateToken - immediate charge + token
-        amount: 3371,
+        amount: 337100, // 3,371₪ in agorot
         hasTrial: false
       };
     case 'vip':
       return {
         operationType: 1, // ChargeOnly - one-time payment
-        amount: 13121,
+        amount: 1312100, // 13,121₪ in agorot
         hasTrial: false
       };
     default:
       return {
-        operationType: 3,
-        amount: 0,
+        operationType: 2,
+        amount: 100,
         hasTrial: false
       };
   }

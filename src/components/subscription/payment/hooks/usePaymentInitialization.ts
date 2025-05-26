@@ -20,7 +20,6 @@ export const usePaymentInitialization = (
   const setIsLoading = setIsLoadingExternal || setIsLoadingState;
 
   useEffect(() => {
-    // Only initiate payment if we have the required data
     if (selectedPlan) {
       initiateCardcomPayment();
     }
