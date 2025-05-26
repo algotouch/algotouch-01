@@ -1,106 +1,103 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Heart, MessageCircle, Share2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { useAuth } from '@/contexts/auth/AuthContext';
+import { MessageSquare, Share2, ThumbsUp, Tag, Image as ImageIcon } from 'lucide-react';
+import { likePost } from '@/lib/community';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/auth';
+import { useCommunity } from '@/contexts/community/CommunityContext';
+import { Badge } from '../ui/badge';
+import { Post } from '@/lib/community/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CommentSection } from './CommentSection';
+import { AspectRatio } from '../ui/aspect-ratio';
 
-interface Post {
-  id: string;
-  title: string;
-  content: string;
-  author: {
-    id: string;
-    name: string;
-    avatar?: string;
+export function PostList() {
+  const { isAuthenticated, user } = useAuth();
+  const { 
+    posts, 
+    loading, 
+    handlePostLiked, 
+    setActivePostId,
+    activePostId,
+    activePost,
+    activePostComments
+  } = useCommunity();
+
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const formatPostTime = (timeString: string) => {
+    const postTime = new Date(timeString);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - postTime.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'כרגע';
+    if (diffInMinutes < 60) return `לפני ${diffInMinutes} דקות`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `לפני ${diffInHours} שעות`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    return `לפני ${diffInDays} ימים`;
   };
-  created_at: string;
-  likes: number;
-  comments: number;
-  tags: string[];
-  liked_by_user: boolean;
-}
-
-interface PostListProps {
-  posts: Post[];
-  loading?: boolean;
-  onLike?: (postId: string) => void;
-  onComment?: (postId: string) => void;
-  onShare?: (postId: string) => void;
-  onPostClick?: (postId: string) => void;
-}
-
-const PostList: React.FC<PostListProps> = ({
-  posts,
-  loading = false,
-  onLike,
-  onComment,
-  onShare,
-  onPostClick,
-}) => {
-  const { user } = useAuth();
-  const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    // Initialize liked posts from props
-    const initialLikedPosts: Record<string, boolean> = {};
-    posts.forEach(post => {
-      initialLikedPosts[post.id] = post.liked_by_user;
-    });
-    setLikedPosts(initialLikedPosts);
-  }, [posts]);
-
-  const handleLike = (postId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setLikedPosts(prev => ({
-      ...prev,
-      [postId]: !prev[postId]
-    }));
-    if (onLike) onLike(postId);
+  
+  const formatUserName = (post: Post) => {
+    if (post.profiles?.first_name || post.profiles?.last_name) {
+      return `${post.profiles.first_name || ''} ${post.profiles.last_name || ''}`.trim();
+    }
+    return `סוחר${post.user_id.substring(0, 4)}`;
   };
-
-  const handleComment = (postId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onComment) onComment(postId);
-  };
-
-  const handleShare = (postId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onShare) onShare(postId);
+  
+  const handleLikePostClick = async (postId: string) => {
+    if (!isAuthenticated) {
+      toast.error('יש להתחבר כדי לבצע פעולה זו');
+      return;
+    }
+    
+    try {
+      const success = await likePost(postId, user!.id);
+      
+      if (success) {
+        await handlePostLiked(postId);
+        toast.success('הוספת לייק לפוסט!');
+      }
+    } catch (error) {
+      console.error('Error liking post:', error);
+      toast.error('שגיאה בהוספת לייק לפוסט');
+    }
   };
 
-  const handlePostClick = (postId: string) => {
-    if (onPostClick) onPostClick(postId);
+  const handleOpenComments = (postId: string) => {
+    setActivePostId(postId);
   };
 
-  if (loading) {
+  const handleOpenImageModal = (imageUrl: string) => {
+    setSelectedImage(imageUrl);
+    setIsImageModalOpen(true);
+  };
+  
+  if (loading && posts.length === 0) {
     return (
       <div className="space-y-4">
-        {[1, 2, 3].map((_, index) => (
-          <Card key={index} className="cursor-pointer hover:bg-accent/50 transition-colors">
-            <CardHeader className="pb-2">
-              <div className="flex items-center space-x-2">
-                <div className="h-10 w-10 rounded-full bg-muted animate-pulse"></div>
-                <div className="space-y-2 flex-1">
-                  <div className="h-4 w-1/3 bg-muted animate-pulse rounded"></div>
-                  <div className="h-3 w-1/4 bg-muted animate-pulse rounded"></div>
+        {[1, 2, 3].map(i => (
+          <Card key={i} className="overflow-hidden animate-pulse">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-full bg-gray-200"></div>
+                <div className="flex-1">
+                  <div className="h-5 w-1/3 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 w-1/4 bg-gray-100 rounded mb-4"></div>
+                  <div className="h-4 w-full bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 w-5/6 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 w-2/3 bg-gray-200 rounded mb-4"></div>
+                  <div className="flex gap-4 mt-4">
+                    <div className="h-8 w-16 bg-gray-100 rounded"></div>
+                    <div className="h-8 w-16 bg-gray-100 rounded"></div>
+                    <div className="h-8 w-16 bg-gray-100 rounded"></div>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="h-4 w-full bg-muted animate-pulse rounded"></div>
-                <div className="h-4 w-full bg-muted animate-pulse rounded"></div>
-                <div className="h-4 w-2/3 bg-muted animate-pulse rounded"></div>
-              </div>
-              <div className="flex items-center justify-between mt-4">
-                <div className="flex space-x-4">
-                  <div className="h-8 w-16 bg-muted animate-pulse rounded"></div>
-                  <div className="h-8 w-16 bg-muted animate-pulse rounded"></div>
-                </div>
-                <div className="h-8 w-16 bg-muted animate-pulse rounded"></div>
               </div>
             </CardContent>
           </Card>
@@ -108,88 +105,197 @@ const PostList: React.FC<PostListProps> = ({
       </div>
     );
   }
-
-  if (!posts || posts.length === 0) {
+  
+  if (posts.length === 0 && !loading) {
     return (
-      <Card className="text-center p-6">
-        <CardContent>
-          <p className="text-muted-foreground">אין פוסטים להצגה</p>
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground py-8">
+            עדיין אין פוסטים בקהילה. היה הראשון לפרסם!
+          </p>
         </CardContent>
       </Card>
     );
   }
-
+  
   return (
-    <div className="space-y-4">
-      {posts.map((post) => (
-        <Card 
-          key={post.id} 
-          className="cursor-pointer hover:bg-accent/50 transition-colors"
-          onClick={() => handlePostClick(post.id)}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center space-x-2 rtl:space-x-reverse">
-              <Avatar className="h-10 w-10">
-                {post.author.avatar ? (
-                  <img src={post.author.avatar} alt={post.author.name} />
-                ) : (
-                  <AvatarFallback>{post.author.name.substring(0, 2)}</AvatarFallback>
-                )}
-              </Avatar>
-              <div>
-                <CardTitle className="text-base">{post.author.name}</CardTitle>
-                <CardDescription>
-                  {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
-                </CardDescription>
+    <>
+      <div className="space-y-4">
+        {posts.map(post => (
+          <Card key={post.id} className="overflow-hidden">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={`https://avatar.vercel.sh/${post.user_id}?size=40`} />
+                  <AvatarFallback>{post.profiles?.first_name?.charAt(0) || 'U'}</AvatarFallback>
+                </Avatar>
+                
+                <div className="flex-1">
+                  <div className="flex justify-between">
+                    <div>
+                      <h3 className="font-medium">@
+                        {post.profiles?.first_name || post.profiles?.last_name 
+                          ? `${post.profiles?.first_name || ''} ${post.profiles?.last_name || ''}`.trim()
+                          : `סוחר${post.user_id.substring(0, 4)}`
+                        }
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {new Date(post.created_at).toLocaleString('he-IL')}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3">
+                    <h4 className="font-semibold text-lg mb-2">{post.title}</h4>
+                    <p className="text-gray-700 whitespace-pre-line">{post.content}</p>
+                    
+                    {post.tags && post.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {post.tags.map(tag => (
+                          <Badge key={tag.id} variant="outline" className="bg-blue-50">
+                            <Tag className="h-3 w-3 mr-1" /> {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {post.media_urls && post.media_urls.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        {post.media_urls.slice(0, 4).map((url, idx) => (
+                          <div 
+                            key={idx} 
+                            className="relative cursor-pointer rounded-md overflow-hidden"
+                            onClick={() => handleOpenImageModal(url)}
+                          >
+                            <AspectRatio ratio={16/9}>
+                              <img 
+                                src={url} 
+                                alt={`תמונה ${idx + 1}`}
+                                className="object-cover w-full h-full"
+                              />
+                            </AspectRatio>
+                          </div>
+                        ))}
+                        {post.media_urls.length > 4 && (
+                          <div className="relative rounded-md overflow-hidden bg-black/60 flex items-center justify-center">
+                            <span className="text-white text-lg font-medium">+{post.media_urls.length - 4}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex mt-4 gap-4">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="flex items-center gap-1"
+                      onClick={() => handleLikePostClick(post.id)}
+                      disabled={loading || !isAuthenticated}
+                    >
+                      <ThumbsUp size={16} /> {post.likes}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="flex items-center gap-1"
+                      onClick={() => handleOpenComments(post.id)}
+                    >
+                      <MessageSquare size={16} /> {post.comments}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="flex items-center gap-1">
+                      <Share2 size={16} /> שתף
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <h3 className="font-semibold mb-2">{post.title}</h3>
-            <p className="text-muted-foreground mb-4 line-clamp-3">{post.content}</p>
-            
-            {post.tags && post.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {post.tags.map((tag, index) => (
-                  <Badge key={index} variant="outline">{tag}</Badge>
-                ))}
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex space-x-4 rtl:space-x-reverse">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className={`flex items-center gap-1 ${likedPosts[post.id] ? 'text-red-500' : ''}`}
-                  onClick={(e) => handleLike(post.id, e)}
-                >
-                  <Heart className={`h-4 w-4 ${likedPosts[post.id] ? 'fill-red-500' : ''}`} />
-                  <span>{post.likes}</span>
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="flex items-center gap-1"
-                  onClick={(e) => handleComment(post.id, e)}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  <span>{post.comments}</span>
-                </Button>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={(e) => handleShare(post.id, e)}
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-};
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-export default PostList;
+      <Dialog 
+        open={activePostId !== null} 
+        onOpenChange={(open) => !open && setActivePostId(null)}
+      >
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          {activePost && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{activePost.title}</DialogTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={`https://avatar.vercel.sh/${activePost.user_id}?size=24`} />
+                    <AvatarFallback>{activePost.profiles?.first_name?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">
+                    {activePost.profiles?.first_name || activePost.profiles?.last_name 
+                      ? `${activePost.profiles?.first_name || ''} ${activePost.profiles?.last_name || ''}`.trim()
+                      : `סוחר${activePost.user_id.substring(0, 4)}`
+                    }
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(activePost.created_at).toLocaleString('he-IL')}
+                  </span>
+                </div>
+              </DialogHeader>
+              
+              <div className="whitespace-pre-line mt-4">
+                {activePost.content}
+              </div>
+              
+              {activePost.tags && activePost.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {activePost.tags.map(tag => (
+                    <Badge key={tag.id} variant="outline" className="bg-blue-50">
+                      <Tag className="h-3 w-3 mr-1" /> {tag.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {activePost.media_urls && activePost.media_urls.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {activePost.media_urls.map((url, idx) => (
+                    <div 
+                      key={idx} 
+                      className="relative cursor-pointer rounded-md overflow-hidden"
+                      onClick={() => handleOpenImageModal(url)}
+                    >
+                      <AspectRatio ratio={16/9}>
+                        <img 
+                          src={url} 
+                          alt={`תמונה ${idx + 1}`}
+                          className="object-cover w-full h-full"
+                        />
+                      </AspectRatio>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <CommentSection 
+                postId={activePost.id} 
+                comments={activePostComments} 
+              />
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isImageModalOpen} onOpenChange={setIsImageModalOpen}>
+        <DialogContent className="max-w-4xl p-0 bg-transparent border-none shadow-none">
+          {selectedImage && (
+            <div className="relative w-full h-full max-h-[80vh] flex items-center justify-center">
+              <img 
+                src={selectedImage}
+                alt="תמונה מוגדלת"
+                className="object-contain max-h-[80vh] rounded-lg"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

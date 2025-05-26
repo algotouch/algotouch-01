@@ -1,41 +1,34 @@
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/auth';
 
-interface RegistrationData {
-  email?: string;
-  password?: string;
-  userData?: {
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-  };
-  registrationTime?: string;
-}
-
+// Simplified registration data hook that works with useAuth
 export const useSimpleRegistrationData = () => {
-  const [registrationData, setRegistrationData] = useState<RegistrationData | null>(null);
+  const { registrationData, setRegistrationData, clearRegistrationData, pendingSubscription } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const updateRegistrationData = useCallback((data: Partial<RegistrationData>) => {
-    const updatedData = {
-      ...(registrationData || {}),
-      ...data,
-      registrationTime: data.registrationTime || new Date().toISOString()
-    };
-    
-    setRegistrationData(updatedData);
-    sessionStorage.setItem('registration_data', JSON.stringify(updatedData));
-  }, [registrationData]);
+  // Simple getter for registration data
+  const getRegistrationData = () => {
+    return registrationData;
+  };
 
-  const clearRegistrationData = useCallback(() => {
-    sessionStorage.removeItem('registration_data');
-    sessionStorage.removeItem('force_subscription_access');
-    localStorage.removeItem('temp_registration_id');
-    setRegistrationData(null);
-  }, []);
+  // Simple setter that also updates session storage
+  const updateRegistrationData = (newData: any) => {
+    setRegistrationData(newData);
+  };
+
+  // Simple clear function
+  const clearData = () => {
+    clearRegistrationData();
+  };
 
   return {
     registrationData,
     updateRegistrationData,
-    clearRegistrationData
+    clearRegistrationData: clearData,
+    pendingSubscription,
+    isLoading,
+    isRegistering: !!registrationData,
+    getRegistrationData
   };
 };

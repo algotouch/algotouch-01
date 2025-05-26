@@ -1,13 +1,10 @@
-import { useState, useCallback } from 'react';
+
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { savePaymentSession } from '../services/recoveryService';
 import { getErrorMessage, mapErrorCode, isTransientError, logPaymentError } from '../utils/errorHandling';
-import { useAuth } from '@/contexts/auth/AuthContext';
-import { paymentErrorHandler } from '@/services/errors/handlers/paymentErrorHandler';
-import { PaymentError } from '@/types/payment';
-import { errorTracking } from '@/services/errors/utils/errorTracking';
-import { paymentLogger } from '@/services/logging/paymentLogger';
+import { useAuth } from '@/contexts/auth';
 
 interface UsePaymentErrorHandlingProps {
   planId: string;
@@ -62,7 +59,7 @@ export const usePaymentErrorHandling = ({
   };
   
   // Handle payment error with recovery
-  const handleError = useCallback(async (error: any, paymentDetails?: any) => {
+  const handleError = async (error: any, paymentDetails?: any) => {
     setLastError(error);
     
     // Create session ID for potential recovery
@@ -122,7 +119,7 @@ export const usePaymentErrorHandling = ({
     }
     
     return errorInfo;
-  }, [user, planId, onCardUpdate, onAlternativePayment]);
+  };
   
   return {
     handleError,

@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
-import { toast } from 'sonner';
+
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase-client';
-import { useAuth } from '@/contexts/auth/AuthContext';
+import { useAuth } from '@/contexts/auth';
+import { toast } from 'sonner';
 import { Steps } from '@/types/subscription';
 
 export const useSubscriptionFlow = () => {
@@ -146,7 +148,7 @@ export const useSubscriptionFlow = () => {
   }, [planId, isAuthenticated, user, registrationData, setRegistrationData]);
 
   // Handle plan selection
-  const handlePlanSelect = useCallback((plan: string) => {
+  const handlePlanSelect = (plan: string) => {
     setSelectedPlan(plan);
     
     // Update registration data
@@ -156,10 +158,10 @@ export const useSubscriptionFlow = () => {
     
     setCurrentStep('contract');
     navigate(`/subscription`, { replace: true });
-  }, [registrationData, navigate]);
+  };
 
   // Handle contract signing
-  const handleContractSign = useCallback((contractId: string) => {
+  const handleContractSign = (contractId: string) => {
     setContractId(contractId);
     
     // Update registration data
@@ -171,17 +173,17 @@ export const useSubscriptionFlow = () => {
     }
     
     setCurrentStep('payment');
-  }, [registrationData]);
+  };
 
   // Handle payment completion
-  const handlePaymentComplete = useCallback(() => {
+  const handlePaymentComplete = () => {
     setCurrentStep('completion');
-  }, []);
+  };
 
   // Handle back navigation
-  const handleBackToStep = useCallback((step: Steps) => {
+  const handleBackToStep = (step: Steps) => {
     setCurrentStep(step);
-  }, []);
+  };
 
   return {
     currentStep,

@@ -1,18 +1,15 @@
 
-import React, { createContext, useContext } from 'react';
+import React from 'react';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-const ThemeContext = createContext<any>(null);
+// Re-export the hook
+export { useTheme } from '@/hooks/use-theme';
 
+// For backward compatibility, we wrap the next-themes provider
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       {children}
     </NextThemesProvider>
   );
-};
-
-export const useTheme = () => {
-  const { theme, setTheme, resolvedTheme } = require('next-themes').useTheme();
-  return { theme, setTheme, resolvedTheme };
 };

@@ -1,112 +1,141 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { CheckCircle, CreditCard, FileText, Calendar } from 'lucide-react';
-import { toast } from 'sonner';
-import { Spinner } from '@/components/ui/spinner';
-import { useAuth } from '@/contexts/auth/AuthContext';
+
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import SubscriptionSteps from '@/components/subscription/SubscriptionSteps';
 import { useSubscriptionFlow } from './hooks/useSubscriptionFlow';
-import { LoadingSkeleton } from './error-states/LoadingSkeleton';
-import { NoSubscriptionState } from './error-states/NoSubscriptionState';
-import { SubscriptionErrorView } from './error-states/SubscriptionErrorView';
-import { ContractSection } from './ContractSection';
-import { PaymentSection } from './payment/PaymentSection';
-import { CompletionView } from './views/CompletionView';
-import { ContractView } from './views/ContractView';
+import SubscriptionView from './views/SubscriptionView';
+import { toast } from 'sonner';
+import { useSubscriptionContext } from '@/contexts/subscription/SubscriptionContext';
+import { useAuth } from '@/contexts/auth';
+import { Spinner } from '@/components/ui/spinner';
 
 const SubscriptionContent = () => {
-  const { user, isAuthenticated, registrationData, pendingSubscription } = useAuth();
+  const { hasActiveSubscription, isCheckingSubscription } = useSubscriptionContext();
+  const { isAuthenticated, registrationData, clearRegistrationData } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [hasShownError, setHasShownError] = useState(false);
+  const [isValidAccess, setIsValidAccess] = useState(false);
+  
   const {
-    subscription,
-    details,
-    stage,
-    loading,
-    error,
-    startSubscription,
-    handleContractAcceptance,
-    handlePaymentSuccess,
-    handlePaymentError,
-    retrySubscription,
-    resetFlow
+    currentStep,
+    selectedPlan,
+    fullName,
+    isLoading: flowLoading,
+    handlePlanSelect,
+    handleContractSign,
+    handlePaymentComplete,
+    handleBackToStep,
+    contractId
   } = useSubscriptionFlow();
-  
-  const hasValidAccess = isAuthenticated || (registrationData && pendingSubscription);
-  
+
+  const isLoading = flowLoading || isCheckingSubscription;
+
+  // Check access validity
   useEffect(() => {
-    if (error) {
-      toast.error(error.message || 'Failed to load subscription data');
+    console.log('SubscriptionContent: Checking access validity', {
+      isAuthenticated,
+      hasRegistrationData: !!registrationData,
+      path: location.pathname
+    });
+    
+    if (isAuthenticated || registrationData) {
+      console.log('SubscriptionContent: Valid access detected');
+      setIsValidAccess(true);
+    } else {
+      console.log('SubscriptionContent: Invalid access - no auth or registration data');
+      setIsValidAccess(false);
     }
-  }, [error]);
-  
-  if (!hasValidAccess) {
+  }, [isAuthenticated, registrationData, location.pathname]);
+
+  // Handle back to auth functionality
+  const handleBackToAuth = () => {
+    console.log('SubscriptionContent: Handling back to auth');
+    clearRegistrationData();
+    sessionStorage.removeItem('registration_data');
+    navigate('/auth?tab=signup', { replace: true });
+  };
+
+  // Handle users with active subscription
+  useEffect(() => {
+    if (hasActiveSubscription && isAuthenticated) {
+      console.log('SubscriptionContent: User has active subscription, redirecting');
+      toast.success('יש לך כבר מנוי פעיל');
+      navigate('/my-subscription', { replace: true });
+      return;
+    }
+  }, [hasActiveSubscription, isAuthenticated, navigate]);
+
+  // Show loading state
+  if (isLoading) {
     return (
-      <Card className="glass-card-2025">
-        <CardHeader>
-          <CardTitle>גישה מוגבלת</CardTitle>
-          <CardDescription>עליך להיות מנוי כדי לגשת לתוכן זה</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p>אנא הירשם או התחבר כדי להמשיך</p>
-        </CardContent>
-      </Card>
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">טוען נתוני מנוי...</p>
+        </div>
+      </div>
     );
   }
 
-  if (loading) {
-    return <LoadingSkeleton />;
+  // Show error state only if we really don't have any valid data and haven't shown error yet
+  if (!isValidAccess && !hasShownError) {
+    console.log('SubscriptionContent: No valid access state, showing error');
+    setHasShownError(true);
+    toast.error('נתוני הרשמה חסרים. אנא התחל תהליך הרשמה מחדש.');
+    
+    // Don't redirect immediately - let user see the message
+    setTimeout(() => {
+      handleBackToAuth();
+    }, 3000);
+    
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="text-red-600 text-lg font-semibold">שגיאה בטעינת נתוני הרשמה</div>
+          <p className="text-muted-foreground">מעביר אותך לעמוד ההרשמה...</p>
+          <button 
+            onClick={handleBackToAuth}
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+          >
+            חזור להרשמה עכשיו
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  if (error) {
-    return <SubscriptionErrorView onRetry={retrySubscription} />;
+  // Don't render content if access is not valid
+  if (!isValidAccess) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Spinner size="lg" />
+          <p className="text-muted-foreground">בודק הרשאות גישה...</p>
+        </div>
+      </div>
+    );
   }
 
-  if (!subscription) {
-    return <NoSubscriptionState onStart={startSubscription} />;
-  }
-  
   return (
-    <div className="space-y-6">
-      {stage === 'contract' && (
-        <ContractView onAccept={handleContractAcceptance} />
-      )}
+    <div className="max-w-5xl mx-auto px-4" dir="rtl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">השלמת תהליך ההרשמה</h1>
+        <p className="text-muted-foreground">יש להשלים את השלבים הבאים לקבלת גישה למערכת</p>
+        
+        <SubscriptionSteps currentStep={currentStep} />
+      </div>
       
-      {stage === 'payment' && (
-        <PaymentSection 
-          onSuccess={handlePaymentSuccess} 
-          onError={handlePaymentError} 
-        />
-      )}
-      
-      {stage === 'complete' && (
-        <CompletionView onComplete={resetFlow} />
-      )}
-      
-      {stage === 'view' && (
-        <Card className="glass-card-2025">
-          <CardHeader>
-            <CardTitle>פרטי המנוי שלך</CardTitle>
-            <CardDescription>סקירה של המנוי הנוכחי שלך</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2 rtl:space-x-reverse">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <p><strong>סטטוס:</strong> {details?.statusText}</p>
-            </div>
-            <div className="flex items-center space-x-2 rtl:space-x-reverse">
-              <CreditCard className="h-4 w-4 text-blue-500" />
-              <p><strong>תכנית:</strong> {details?.planName}</p>
-            </div>
-            <div className="flex items-center space-x-2 rtl:space-x-reverse">
-              <Calendar className="h-4 w-4 text-yellow-500" />
-              <p><strong>תאריך חידוש:</strong> {details?.renewalDateText}</p>
-            </div>
-            <Separator />
-            <ContractSection />
-          </CardContent>
-        </Card>
-      )}
+      <SubscriptionView
+        currentStep={currentStep}
+        selectedPlan={selectedPlan}
+        fullName={fullName}
+        onPlanSelect={handlePlanSelect}
+        onContractSign={handleContractSign}
+        onPaymentComplete={handlePaymentComplete}
+        onBack={handleBackToStep}
+        onBackToAuth={handleBackToAuth}
+      />
     </div>
   );
 };

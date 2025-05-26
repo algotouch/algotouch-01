@@ -1,72 +1,86 @@
+
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import DigitalContractForm from '@/components/DigitalContractForm';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { FileText, Download, Eye } from 'lucide-react';
-import { useAuth } from '@/contexts/auth/AuthContext';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAuth } from '@/contexts/auth';
 
 interface ContractSectionProps {
-  contractUrl?: string;
-  contractName?: string;
-  onDownload?: () => void;
-  onView?: () => void;
+  selectedPlan: string;
+  fullName: string;
+  onSign: (contractData: any) => void;
+  onBack: () => void;
 }
 
-const ContractSection: React.FC<ContractSectionProps> = ({ 
-  contractUrl, 
-  contractName = 'תנאי שימוש',
-  onDownload,
-  onView
+const ContractSection: React.FC<ContractSectionProps> = ({
+  selectedPlan,
+  fullName,
+  onSign,
+  onBack
 }) => {
-  const { user } = useAuth();
-  const [canDownload, setCanDownload] = useState(false);
-  const [canView, setCanView] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { user, registrationData } = useAuth();
 
+  // Log the received fullName for debugging
   useEffect(() => {
-    setCanDownload(!!contractUrl && !!onDownload);
-    setCanView(!!contractUrl && !!onView);
-  }, [contractUrl, onDownload, onView]);
+    console.log('ContractSection: Received props:', {
+      selectedPlan,
+      fullName,
+      hasUser: !!user,
+      hasRegistrationData: !!registrationData
+    });
+  }, [selectedPlan, fullName, user, registrationData]);
+
+  // Function to handle contract signing
+  const handleSignContract = async (contractData: any) => {
+    try {
+      setIsProcessing(true);
+      console.log('ContractSection: Contract signed with data:', {
+        hasSignature: !!contractData.signature,
+        hasContractHtml: !!contractData.contractHtml,
+        fullName,
+        selectedPlan,
+        hasUser: !!user?.id,
+        hasRegistrationData: !!registrationData
+      });
+
+      // Pass the contract data directly to the parent along with user information
+      onSign({
+        ...contractData,
+        fullName,
+        userId: user?.id
+      });
+    } catch (error) {
+      console.error('Error signing contract:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
-    <Card className="glass-card-2025">
-      <CardHeader>
-        <CardTitle>חוזה והסכמות</CardTitle>
-        <CardDescription>סקירה וחתימה על החוזה שלך</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">{contractName}</h3>
-            <p className="text-sm text-muted-foreground">
-              אנא סקור את החוזה שלך בעיון לפני שתמשיך.
-            </p>
+    <div className="space-y-6">
+      <Alert className="mb-4">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          אנא קרא את ההסכם בעיון וחתום במקום המיועד בתחתית העמוד
+        </AlertDescription>
+      </Alert>
+      
+      <DigitalContractForm onSign={handleSignContract} planId={selectedPlan} fullName={fullName} />
+      
+      <div className="mt-6 flex justify-between">
+        <Button variant="outline" onClick={onBack} disabled={isProcessing}>
+          חזור
+        </Button>
+        
+        {isProcessing && (
+          <div className="flex items-center text-sm text-muted-foreground">
+            שומר חוזה...
           </div>
-          <Badge variant="secondary">מחייב חתימה</Badge>
-        </div>
-        <Separator />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {canView && (
-            <Button variant="outline" className="w-full" onClick={onView}>
-              <Eye className="mr-2 h-4 w-4" />
-              צפייה בחוזה
-            </Button>
-          )}
-          {canDownload && (
-            <Button className="w-full" onClick={onDownload}>
-              <Download className="mr-2 h-4 w-4" />
-              הורדת חוזה
-            </Button>
-          )}
-          {!canView && !canDownload && (
-            <div className="text-center text-muted-foreground">
-              <FileText className="mx-auto h-6 w-6 mb-2" />
-              <p>החוזה אינו זמין כרגע</p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        )}
+      </div>
+    </div>
   );
 };
 

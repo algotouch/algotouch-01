@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/auth/AuthContext';
+import { useAuth } from '@/contexts/auth';
 import { getContractById, verifyContractSignature } from '@/lib/contracts/contract-service';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, AlertCircle } from 'lucide-react';

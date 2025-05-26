@@ -1,7 +1,7 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase-client';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth';
 import { Post, Comment } from '@/lib/community/types';
 import { 
   getCommunityPosts, 

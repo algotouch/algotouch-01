@@ -1,82 +1,102 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
-import { useAuth } from '@/contexts/auth/AuthContext';
 
-const PaymentHandling = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import PaymentSuccess from '@/components/payment/PaymentSuccess';
+import PaymentError from '@/components/payment/PaymentError';
+import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/contexts/auth';
+import { supabase } from '@/lib/supabase-client';
+
+const PaymentHandling: React.FC = () => {
+  const location = useLocation();
   const navigate = useNavigate();
-  const { session } = useAuth();
-  const [searchParams] = useSearchParams();
-  
-  const sessionId = searchParams.get('session_id');
-  const paymentType = searchParams.get('payment_type') || 'subscription';
+  const { user, isAuthenticated } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!sessionId) {
-      setError('Session ID is missing.');
-      setLoading(false);
+    const params = new URLSearchParams(location.search);
+    const isSuccessParam = params.get('success') === 'true';
+    const errorParam = params.get('error') === 'true';
+    const planId = params.get('plan');
+    const regId = params.get('regId');
+
+    // Clear any existing payment temp data
+    localStorage.removeItem('temp_payment_session');
+
+    // Check authentication state
+    if (!isAuthenticated && !regId) {
+      console.log('User not authenticated, redirecting to login');
+      navigate('/auth', { state: { from: location } });
       return;
     }
 
-    const checkPaymentStatus = async () => {
-      setLoading(true);
-      setError(null);
-
+    const processPayment = async () => {
       try {
-        const response = await fetch(`/api/payment/check-status?session_id=${sessionId}`);
-        const data = await response.json();
-
-        if (data.paymentStatus === 'paid') {
-          // Payment successful
-          console.log('Payment successful, navigating to success page');
-          navigate('/payment/success');
+        setIsLoading(true);
+        
+        if (isSuccessParam) {
+          // If we have a registration ID, verify the payment with the backend
+          if (regId) {
+            const { data, error } = await supabase.functions.invoke('verify-payment-registration', {
+              body: { registrationId: regId }
+            });
+            
+            if (error) throw new Error(error.message);
+            if (!data.success) throw new Error(data.message || 'Payment verification failed');
+            
+            setIsSuccess(true);
+            return;
+          }
+          
+          // Regular payment success flow
+          setIsSuccess(true);
+          
+          // Update user subscription status if needed
+          if (user && planId) {
+            await supabase.from('subscriptions').upsert({
+              user_id: user.id,
+              plan_type: planId,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            });
+          }
+        } else if (errorParam) {
+          // Handle payment error
+          setIsSuccess(false);
+          setErrorMessage('התשלום נכשל או בוטל. אנא נסה שנית.');
         } else {
-          // Payment failed or pending
-          console.error('Payment failed or pending:', data.error);
-          setError(data.error || 'Payment failed.');
-          navigate('/payment/failed');
+          // No status parameters, redirect to subscription page
+          navigate('/subscription');
         }
-      } catch (err) {
-        console.error('Error checking payment status:', err);
-        setError('Failed to check payment status.');
-        navigate('/payment/failed');
+      } catch (error: any) {
+        console.error('Error processing payment result:', error);
+        setIsSuccess(false);
+        setErrorMessage(error.message || 'אירעה שגיאה בעיבוד התשלום');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
-    checkPaymentStatus();
-  }, [sessionId, navigate, session]);
+    processPayment();
+  }, [location, navigate, user, isAuthenticated]);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Processing Payment</CardTitle>
-          <CardDescription>Please wait while we verify your payment...</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center space-y-4">
-          {loading ? (
-            <>
-              <Spinner size="lg" />
-              <p>Verifying payment status...</p>
-            </>
-          ) : error ? (
-            <>
-              <p className="text-red-500">Error: {error}</p>
-              <Button onClick={() => navigate('/subscription')}>Return to Subscription</Button>
-            </>
-          ) : (
-            <p>Redirecting...</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Spinner size="lg" />
+        <p className="mt-4 text-muted-foreground">מעבד את פרטי התשלום...</p>
+      </div>
+    );
+  }
+
+  if (isSuccess) {
+    return <PaymentSuccess redirectPath="/dashboard" />;
+  }
+
+  // Using the updated PaymentError component with explicit redirectPath
+  return <PaymentError message={errorMessage || 'אירעה שגיאה בתהליך התשלום'} redirectPath="/subscription" />;
 };
 
 export default PaymentHandling;
