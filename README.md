@@ -1,120 +1,69 @@
-# AlgoTouch
+# Welcome to your Lovable project
 
-A modern trading platform built with React, TypeScript, and Supabase.
+## Project info
 
-## Features
+**URL**: https://lovable.dev/projects/943ea41c-32cf-4f38-9bf8-8a57a35db025
 
-- Real-time stock data monitoring
-- Advanced trading tools
-- User authentication and authorization
-- Secure payment processing
-- Responsive design
-- RTL support
+## How can I edit this code?
 
-## Prerequisites
+There are several ways of editing your application.
 
-- Node.js >= 18.0.0
-- npm >= 9.0.0
-- Git
+**Use Lovable**
 
-## Getting Started
+Simply visit the [Lovable Project](https://lovable.dev/projects/943ea41c-32cf-4f38-9bf8-8a57a35db025) and start prompting.
 
-1. Clone the repository:
-```bash
-git clone https://github.com/your-username/algotouch.git
-cd algotouch
-```
+Changes made via Lovable will be committed automatically to this repo.
 
-2. Install dependencies:
-```bash
-npm install
-```
+**Use your preferred IDE**
 
-3. Create environment files:
-```bash
-cp .env.example .env.local
-```
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-4. Start the development server:
-```bash
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+Follow these steps:
+
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
+
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
+
+# Step 3: Install the necessary dependencies.
+npm i
+
+# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-## Development
+**Edit a file directly in GitHub**
 
-- `npm run dev` - Start development server
-- `npm run lint` - Run ESLint
-- `npm run type-check` - Run TypeScript type checking
-- `npm run test` - Run tests
-- `npm run format` - Format code with Prettier
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-## Production Deployment
+**Use GitHub Codespaces**
 
-1. Build the application:
-```bash
-npm run build:prod
-```
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-2. Preview the production build:
-```bash
-npm run preview
-```
+## What technologies are used for this project?
 
-3. Deploy to your hosting provider:
-```bash
-# Example for Vercel
-vercel --prod
+This project is built with .
 
-# Example for Netlify
-netlify deploy --prod
-```
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-## Environment Variables
+## How can I deploy this project?
 
-Required environment variables:
+Simply open [Lovable](https://lovable.dev/projects/943ea41c-32cf-4f38-9bf8-8a57a35db025) and click on Share -> Publish.
 
-- `VITE_APP_ENV` - Application environment (development/production)
-- `VITE_API_URL` - API base URL
-- `VITE_SUPABASE_URL` - Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `VITE_CARDCOM_TERMINAL` - Cardcom terminal number
-- `VITE_CARDCOM_USERNAME` - Cardcom username
-- `VITE_CARDCOM_PASSWORD` - Cardcom password
-- `VITE_CARDCOM_API_URL` - Cardcom API URL
+## I want to use a custom domain - is that possible?
 
-## Performance Optimization
-
-The application includes several performance optimizations:
-
-- Code splitting
-- Lazy loading
-- Tree shaking
-- Bundle analysis
-- Image optimization
-- Caching strategies
-
-## Security
-
-- HTTPS enforcement
-- CSP headers
-- XSS protection
-- CSRF protection
-- Rate limiting
-- Input validation
-- Secure authentication
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support, email support@algotouch.com or join our Slack channel.
+We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)

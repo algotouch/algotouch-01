@@ -78,16 +78,16 @@ const Auth = () => {
     }
   }, [error, navigate]);
   
-  // Handle stale registration data
+  // Handle stale registration data - but don't clear immediately to prevent loops
   useEffect(() => {
     if (registrationData && !isAuthenticated) {
       const registrationTime = registrationData.registrationTime ? 
         new Date(registrationData.registrationTime).getTime() : 0;
       const now = new Date().getTime();
-      const twoHoursMs = 2 * 60 * 60 * 1000;
+      const twoHoursMs = 2 * 60 * 60 * 1000; // Extended to 2 hours
       
       if (now - registrationTime > twoHoursMs) {
-        console.log('Auth: Registration data is very stale, clearing');
+        console.log('Auth: Registration data is very stale (>2 hours), clearing');
         clearRegistrationData();
         toast.info('מידע ההרשמה הישן נמחק. אנא התחל מחדש');
       }

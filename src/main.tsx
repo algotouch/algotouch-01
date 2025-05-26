@@ -1,24 +1,27 @@
+
 /**
  * Main entry point for the application
  */
 
 import './index.css';
-import { createRoot } from 'react-dom/client';
-import { StrictMode } from 'react';
-import { ThemeProvider } from '@/contexts/theme';
-import App from './App';
+import { initializeApp } from './lib/appInit';
+import { initializeServiceWorker } from './lib/serviceWorkerInit';
 
-// Initialize React with ThemeProvider
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error('Root element not found');
+// Cache buster timestamp for all dynamic imports
+window.__VITE_TIMESTAMP__ = Date.now();
+
+// Make sure the DOM is fully loaded before initializing React
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize the service worker
+  initializeServiceWorker();
+  
+  // Initialize the React application
+  initializeApp();
+});
+
+// Add TypeScript declaration for window object
+declare global {
+  interface Window {
+    __VITE_TIMESTAMP__: number;
+  }
 }
-
-const root = createRoot(rootElement);
-root.render(
-  <StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  </StrictMode>
-);

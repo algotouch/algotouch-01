@@ -1,37 +1,32 @@
 
-import React, { createContext, useContext, useMemo, ReactNode } from 'react';
-import { useStockDataWithRefresh, type StockData, type StockDataState } from '@/lib/api/stocks';
+import React, { createContext, useContext } from 'react';
+import { useStockDataWithRefresh } from '@/lib/api/stocks';
 
-interface StockDataContextType extends StockDataState {}
+type StockData = {
+  symbol: string;
+  price: string;
+  change: string;
+  changePercent: string;
+  isPositive: boolean;
+};
+
+interface StockDataContextType {
+  stockData: StockData[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+}
 
 const StockDataContext = createContext<StockDataContextType | undefined>(undefined);
 
-interface StockDataProviderProps {
-  children: ReactNode;
-  refreshInterval?: number;
-}
-
-export const StockDataProvider: React.FC<StockDataProviderProps> = ({ 
+export const StockDataProvider: React.FC<{ children: React.ReactNode; refreshInterval?: number }> = ({ 
   children, 
-  refreshInterval 
+  refreshInterval = 30000 
 }) => {
-  const stockDataState = useStockDataWithRefresh(refreshInterval || 0);
-  
-  // Memoize the context value to prevent unnecessary re-renders
-  const contextValue = useMemo<StockDataContextType>(() => ({
-    stockData: stockDataState.stockData,
-    isLoading: stockDataState.isLoading,
-    error: stockDataState.error,
-    refreshData: stockDataState.refreshData
-  }), [
-    stockDataState.stockData,
-    stockDataState.isLoading,
-    stockDataState.error,
-    stockDataState.refreshData
-  ]);
+  const stockDataState = useStockDataWithRefresh(refreshInterval);
   
   return (
-    <StockDataContext.Provider value={contextValue}>
+    <StockDataContext.Provider value={stockDataState}>
       {children}
     </StockDataContext.Provider>
   );
@@ -39,8 +34,10 @@ export const StockDataProvider: React.FC<StockDataProviderProps> = ({
 
 export const useStockData = (): StockDataContextType => {
   const context = useContext(StockDataContext);
+  
   if (context === undefined) {
     throw new Error('useStockData must be used within a StockDataProvider');
   }
+  
   return context;
 };

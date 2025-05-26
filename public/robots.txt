@@ -1,15 +1,14 @@
-# Allow all crawlers
-User-agent: *
+User-agent: Googlebot
 Allow: /
 
-# Sitemap location
-Sitemap: https://algotouch.com/sitemap.xml
+User-agent: Bingbot
+Allow: /
 
-# Disallow admin and API routes
-Disallow: /admin/
-Disallow: /api/
-Disallow: /_next/
-Disallow: /static/
+User-agent: Twitterbot
+Allow: /
 
-# Crawl-delay for all bots
-Crawl-delay: 10
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: *
+Allow: /
