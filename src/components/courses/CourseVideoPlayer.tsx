@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Clock, Volume2 } from "lucide-react";
@@ -22,11 +21,50 @@ const CourseVideoPlayer = ({
 }: CourseVideoPlayerProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
+  // Sanitize and validate video URL
+  const sanitizeVideoUrl = (url: string): string => {
+    try {
+      // Remove any potentially dangerous characters
+      const sanitized = url.replace(/[<>]/g, '');
+      
+      // Validate URL format
+      const parsedUrl = new URL(sanitized);
+      
+      // Only allow YouTube domains
+      const allowedDomains = [
+        'youtube.com',
+        'youtu.be',
+        'www.youtube.com'
+      ];
+      
+      if (!allowedDomains.some(domain => parsedUrl.hostname.endsWith(domain))) {
+        throw new Error('Invalid video domain');
+      }
+      
+      // Ensure it's an embed URL
+      if (!sanitized.includes('youtube.com/embed/')) {
+        // Convert regular YouTube URL to embed URL
+        const videoId = parsedUrl.searchParams.get('v') || 
+                       parsedUrl.pathname.split('/').pop() || 
+                       '';
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+      
+      return sanitized;
+    } catch (e) {
+      console.error('Invalid video URL:', e);
+      return 'https://www.youtube.com/embed/dQw4w9WgXcQ'; // Fallback video
+    }
+  };
+  
   // Setup message listener for YouTube iframe API events
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Verify origin
+      if (!event.origin.includes('youtube.com')) return;
+      
       // Handle YouTube iframe API messages
-      if (event.origin.includes('youtube.com') && event.data && typeof event.data === 'string') {
+      if (event.data && typeof event.data === 'string') {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'onStateChange' && data.info === 0) {
@@ -60,7 +98,7 @@ const CourseVideoPlayer = ({
         try {
           iframeRef.current.contentWindow.postMessage(
             JSON.stringify({ event: 'getCurrentTime' }),
-            '*'
+            'https://www.youtube.com'
           );
         } catch (e) {
           console.error('Error tracking video progress:', e);
@@ -73,12 +111,9 @@ const CourseVideoPlayer = ({
   
   // Create a YouTube embed URL with API enabled
   const getEnhancedEmbedUrl = (url: string) => {
-    if (url.includes('youtube.com/embed/')) {
-      // Add enablejsapi=1 parameter if it's a YouTube embed
-      const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}enablejsapi=1`;
-    }
-    return url;
+    const sanitizedUrl = sanitizeVideoUrl(url);
+    const separator = sanitizedUrl.includes('?') ? '&' : '?';
+    return `${sanitizedUrl}${separator}enablejsapi=1&origin=${window.location.origin}`;
   };
   
   return (

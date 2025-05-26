@@ -1,4 +1,3 @@
-
 // Follow Deno's HTTP server implementation
 import { corsHeaders } from '../_shared/cors.ts';
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
@@ -194,6 +193,33 @@ async function fetchNewsFromRSSFeeds(): Promise<NewsItem[]> {
   return allNews.slice(0, CONFIG.maxNewsItems);
 }
 
+// Helper function to sanitize and validate URLs
+function sanitizeUrl(url: string): string {
+  try {
+    // Remove any potentially dangerous characters
+    const sanitized = url.replace(/[<>]/g, '');
+    
+    // Validate URL format
+    const parsedUrl = new URL(sanitized);
+    
+    // Only allow specific domains
+    const allowedDomains = [
+      'globes.co.il',
+      'calcalist.co.il',
+      'themarker.com',
+      'mako.co.il'
+    ];
+    
+    if (!allowedDomains.some(domain => parsedUrl.hostname.endsWith(domain))) {
+      return 'https://www.globes.co.il/';
+    }
+    
+    return sanitized;
+  } catch (e) {
+    return 'https://www.globes.co.il/';
+  }
+}
+
 // Function to fetch and parse a single RSS feed
 async function fetchRssFeed(feedUrl: string, sourceName: string): Promise<NewsItem[]> {
   logInfo(`Attempting to fetch from RSS source: ${sourceName}`);
@@ -219,10 +245,15 @@ async function fetchRssFeed(feedUrl: string, sourceName: string): Promise<NewsIt
   for (const item of Array.from(items)) {
     if (count >= 10) break; // Limit to first 10 items per feed
     
-    const title = item.querySelector("title")?.textContent;
-    const link = item.querySelector("link")?.textContent;
-    const pubDate = item.querySelector("pubDate")?.textContent;
-    const description = item.querySelector("description")?.textContent;
+    const titleElement = item.querySelector("title");
+    const linkElement = item.querySelector("link");
+    const pubDateElement = item.querySelector("pubDate");
+    const descriptionElement = item.querySelector("description");
+    
+    const title = titleElement?.textContent;
+    const link = linkElement?.textContent;
+    const pubDate = pubDateElement?.textContent;
+    const description = descriptionElement?.textContent;
     
     // Skip items with missing essential data
     if (!title || !link) continue;
@@ -233,7 +264,7 @@ async function fetchRssFeed(feedUrl: string, sourceName: string): Promise<NewsIt
     news.push({
       id: count + 1,
       title: cleanText(title),
-      url: link,
+      url: sanitizeUrl(link),
       time: formatTimeAgo(pubDateTime),
       source: sourceName,
       description: description ? cleanText(description) : undefined
