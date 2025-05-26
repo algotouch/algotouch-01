@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 import { useStockDataWithRefresh, type StockData, type StockDataState } from '@/lib/api/stocks';
 
@@ -12,9 +13,9 @@ interface StockDataProviderProps {
 
 export const StockDataProvider: React.FC<StockDataProviderProps> = ({ 
   children, 
-  refreshInterval = 30000 
+  refreshInterval 
 }) => {
-  const stockDataState = useStockDataWithRefresh(refreshInterval);
+  const stockDataState = useStockDataWithRefresh(refreshInterval || 0);
   
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo<StockDataContextType>(() => ({

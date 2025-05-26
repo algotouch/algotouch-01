@@ -1,5 +1,6 @@
+
 import { useEffect, useState, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '@/lib/supabase-client'
 import { PostgrestError } from '@supabase/supabase-js'
 
 interface DataItem {
@@ -59,7 +60,7 @@ export function Example() {
     return () => {
       isMounted = false
     }
-  }, [fetchData])
+  }, [])
 
   if (loading) return <div>Loading...</div>
   if (error) return <div>Error: {error.message}</div>
@@ -73,4 +74,4 @@ export function Example() {
       </div>
     </div>
   )
-} 
+}
