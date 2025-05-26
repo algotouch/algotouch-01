@@ -42,7 +42,117 @@ const Community = lazy(() => {
   });
 });
 
-// ... keep existing code (other lazy imports) the same ...
+const Courses = lazy(() => {
+  console.log('App.tsx: Loading Courses component');
+  return import('@/pages/Courses').catch(error => {
+    console.error('App.tsx: Failed to load Courses component:', error);
+    throw error;
+  });
+});
+
+const CourseDetail = lazy(() => {
+  console.log('App.tsx: Loading CourseDetail component');
+  return import('@/pages/CourseDetail').catch(error => {
+    console.error('App.tsx: Failed to load CourseDetail component:', error);
+    throw error;
+  });
+});
+
+const Account = lazy(() => {
+  console.log('App.tsx: Loading Account component');
+  return import('@/pages/Account').catch(error => {
+    console.error('App.tsx: Failed to load Account component:', error);
+    throw error;
+  });
+});
+
+const MonthlyReport = lazy(() => {
+  console.log('App.tsx: Loading MonthlyReport component');
+  return import('@/pages/MonthlyReport').catch(error => {
+    console.error('App.tsx: Failed to load MonthlyReport component:', error);
+    throw error;
+  });
+});
+
+const Calendar = lazy(() => {
+  console.log('App.tsx: Loading Calendar component');
+  return import('@/pages/Calendar').catch(error => {
+    console.error('App.tsx: Failed to load Calendar component:', error);
+    throw error;
+  });
+});
+
+const TradeJournal = lazy(() => {
+  console.log('App.tsx: Loading TradeJournal component');
+  return import('@/pages/TradeJournal').catch(error => {
+    console.error('App.tsx: Failed to load TradeJournal component:', error);
+    throw error;
+  });
+});
+
+const Journal = lazy(() => {
+  console.log('App.tsx: Loading Journal component');
+  return import('@/pages/Journal').catch(error => {
+    console.error('App.tsx: Failed to load Journal component:', error);
+    throw error;
+  });
+});
+
+const Profile = lazy(() => {
+  console.log('App.tsx: Loading Profile component');
+  return import('@/pages/Profile').catch(error => {
+    console.error('App.tsx: Failed to load Profile component:', error);
+    throw error;
+  });
+});
+
+const NewTrade = lazy(() => {
+  console.log('App.tsx: Loading NewTrade component');
+  return import('@/pages/NewTrade').catch(error => {
+    console.error('App.tsx: Failed to load NewTrade component:', error);
+    throw error;
+  });
+});
+
+const Blog = lazy(() => {
+  console.log('App.tsx: Loading Blog component');
+  return import('@/pages/Blog').catch(error => {
+    console.error('App.tsx: Failed to load Blog component:', error);
+    throw error;
+  });
+});
+
+const BlogPost = lazy(() => {
+  console.log('App.tsx: Loading BlogPost component');
+  return import('@/pages/BlogPost').catch(error => {
+    console.error('App.tsx: Failed to load BlogPost component:', error);
+    throw error;
+  });
+});
+
+const AIAssistant = lazy(() => {
+  console.log('App.tsx: Loading AIAssistant component');
+  return import('@/pages/AIAssistant').catch(error => {
+    console.error('App.tsx: Failed to load AIAssistant component:', error);
+    throw error;
+  });
+});
+
+const ContractDetails = lazy(() => {
+  console.log('App.tsx: Loading ContractDetails component');
+  return import('@/pages/ContractDetails').catch(error => {
+    console.error('App.tsx: Failed to load ContractDetails component:', error);
+    throw error;
+  });
+});
+
+const MySubscriptionPage = lazy(() => {
+  console.log('App.tsx: Loading MySubscriptionPage component');
+  return import('@/pages/MySubscriptionPage').catch(error => {
+    console.error('App.tsx: Failed to load MySubscriptionPage component:', error);
+    throw error;
+  });
+});
 
 // Simple loading component with better error feedback
 const LoadingPage = () => (
