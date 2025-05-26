@@ -1,11 +1,12 @@
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { useStockDataWithRefresh, StockData } from '@/lib/api/stocks';
+import { useStockDataWithRefresh, type StockData } from '@/hooks/useStockData';
 
 interface StockDataContextType {
   stockData: StockData[];
   isLoading: boolean;
   error: string | null;
+  lastUpdated: Date | null;
   refreshData: () => void;
 }
 
