@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { ErrorTrackingData } from '../types/errorTypes';
 
@@ -77,3 +76,55 @@ export const createAppError = (options: {
   
   return error;
 };
+
+class ErrorTracking {
+  private errors: Array<{
+    id: string;
+    timestamp: string;
+    error: any;
+    context: string;
+  }> = [];
+
+  trackError(error: any, context: string = 'unknown'): string {
+    const errorId = `error_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    
+    this.errors.push({
+      id: errorId,
+      timestamp: new Date().toISOString(),
+      error: this.sanitizeError(error),
+      context
+    });
+
+    // Keep only last 100 errors
+    if (this.errors.length > 100) {
+      this.errors = this.errors.slice(-100);
+    }
+
+    console.error(`[${errorId}] Error in ${context}:`, error);
+    return errorId;
+  }
+
+  getError(errorId: string) {
+    return this.errors.find(e => e.id === errorId);
+  }
+
+  getRecentErrors(count: number = 10) {
+    return this.errors.slice(-count);
+  }
+
+  private sanitizeError(error: any): any {
+    if (!error) return error;
+    
+    const sanitized = { ...error };
+    
+    // Remove sensitive information
+    delete sanitized.token;
+    delete sanitized.cardNumber;
+    delete sanitized.cvv;
+    delete sanitized.password;
+    
+    return sanitized;
+  }
+}
+
+export const errorTracking = new ErrorTracking();

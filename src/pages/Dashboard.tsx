@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import Layout from '@/components/Layout';
 import Courses from '@/components/Courses';
@@ -11,7 +12,7 @@ import { useStockData } from '@/contexts/stock/StockDataContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
 const StockIndicesSection = () => {
-  const { stockData, loading, error, lastUpdated } = useStockData();
+  const { stockData, isLoading, error, lastUpdated } = useStockData();
   
   // Format last updated time
   const formattedStocksLastUpdated = lastUpdated 
@@ -31,7 +32,7 @@ const StockIndicesSection = () => {
         </div>
       </div>
       
-      {loading && stockData.length === 0 ? (
+      {isLoading && stockData.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <Card key={i} className="hover-scale">
@@ -63,7 +64,7 @@ const StockIndicesSection = () => {
                       <ArrowUpRight className="mr-1" size={20} /> : 
                       <ArrowDownRight className="mr-1" size={20} />
                     }
-                    <span>{index.changePercent} ({index.change})</span>
+                    <span>{index.changePercent}% ({index.change})</span>
                   </div>
                 </div>
               </CardContent>
