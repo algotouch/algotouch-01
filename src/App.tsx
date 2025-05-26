@@ -9,6 +9,8 @@ import { DirectionProvider } from '@/contexts/direction/DirectionProvider';
 import { StockDataProvider } from '@/contexts/stock/StockDataContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Home, AlertTriangle } from 'lucide-react';
 
 // Eagerly loaded routes for critical paths
 import Auth from '@/pages/Auth';
@@ -40,25 +42,64 @@ const MySubscriptionPage = lazy(() => import('@/pages/MySubscriptionPage'));
 // Simple loading component
 const LoadingPage = () => (
   <div className="flex h-screen w-full items-center justify-center">
-    <Spinner size="lg" />
-  </div>
-);
-
-// Simple error fallback component
-const ErrorFallback = () => (
-  <div className="flex h-screen w-full items-center justify-center">
     <div className="text-center space-y-4">
-      <h1 className="text-2xl font-bold">שגיאה באפליקציה</h1>
-      <p className="text-muted-foreground">אנא רענן את הדף או נסה שוב מאוחר יותר</p>
-      <button 
-        onClick={() => window.location.reload()} 
-        className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
-      >
-        רענן דף
-      </button>
+      <Spinner size="lg" />
+      <p className="text-muted-foreground">טוען...</p>
     </div>
   </div>
 );
+
+// Improved error fallback component
+const ErrorFallback = () => {
+  const handleReload = () => {
+    // Clear any potentially corrupted data
+    try {
+      sessionStorage.removeItem('registration_data');
+      localStorage.removeItem('temp_registration_id');
+    } catch (e) {
+      console.warn('Could not clear storage:', e);
+    }
+    window.location.reload();
+  };
+
+  const handleGoHome = () => {
+    // Clear any potentially corrupted data and go home
+    try {
+      sessionStorage.removeItem('registration_data');
+      localStorage.removeItem('temp_registration_id');
+    } catch (e) {
+      console.warn('Could not clear storage:', e);
+    }
+    window.location.href = '/dashboard';
+  };
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center p-4">
+      <div className="text-center space-y-6 max-w-md">
+        <AlertTriangle className="h-16 w-16 text-destructive mx-auto" />
+        <div>
+          <h1 className="text-2xl font-bold mb-2">שגיאה באפליקציה</h1>
+          <p className="text-muted-foreground">
+            אירעה שגיאה לא צפויה. אנא נסה שוב או חזור לדף הבית.
+          </p>
+        </div>
+        <div className="flex gap-4 justify-center">
+          <Button onClick={handleReload} className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            רענן דף
+          </Button>
+          <Button variant="outline" onClick={handleGoHome} className="flex items-center gap-2">
+            <Home className="h-4 w-4" />
+            דף הבית
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          אם הבעיה נמשכת, אנא צור קשר עם התמיכה
+        </p>
+      </div>
+    </div>
+  );
+};
 
 function App() {
   return (
