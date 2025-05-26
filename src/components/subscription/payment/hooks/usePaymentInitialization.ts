@@ -20,8 +20,11 @@ export const usePaymentInitialization = (
   const setIsLoading = setIsLoadingExternal || setIsLoadingState;
 
   useEffect(() => {
-    initiateCardcomPayment();
-  }, []);
+    // Only initiate payment if we have the required data
+    if (selectedPlan) {
+      initiateCardcomPayment();
+    }
+  }, [selectedPlan]);
 
   const initiateCardcomPayment = async () => {
     setIsLoading(true);
@@ -29,26 +32,35 @@ export const usePaymentInitialization = (
     
     try {
       // Get registration data if available (for guest checkout)
-      const registrationData = sessionStorage.getItem('registration_data') 
-        ? JSON.parse(sessionStorage.getItem('registration_data') || '{}')
-        : null;
+      let registrationData = null;
+      try {
+        const storedData = sessionStorage.getItem('registration_data');
+        registrationData = storedData ? JSON.parse(storedData) : null;
+      } catch (error) {
+        console.warn('Failed to parse registration data:', error);
+      }
 
       if (!user && !registrationData) {
-        toast.error('נדרשים פרטי הרשמה כדי להמשיך');
-        setInitError('נדרשים פרטי הרשמה');
+        const errorMessage = 'נדרשים פרטי הרשמה כדי להמשיך';
+        toast.error(errorMessage);
+        setInitError(errorMessage);
         return;
       }
 
-      // Extract user details
-      const userFullName = fullName || registrationData?.userData?.fullName || '';
-      const userEmail = email || user?.email || registrationData?.userData?.email || '';
+      // Extract user details safely
+      const userFullName = fullName || 
+        registrationData?.userData?.fullName || 
+        `${registrationData?.userData?.firstName || ''} ${registrationData?.userData?.lastName || ''}`.trim() || 
+        '';
+      const userEmail = email || user?.email || registrationData?.userData?.email || registrationData?.email || '';
       const userPhone = userData?.phone || registrationData?.userData?.phone || '';
       const userIdNumber = userData?.idNumber || registrationData?.userData?.idNumber || '';
 
       console.log('Initiating payment with unified function:', {
         plan: selectedPlan,
         email: userEmail,
-        isGuest: !user
+        isGuest: !user,
+        hasRegistrationData: !!registrationData
       });
 
       const payload = {
@@ -68,11 +80,17 @@ export const usePaymentInitialization = (
         }
       };
 
+      // Validate payload before sending
+      if (!payload.email) {
+        throw new Error('כתובת האימייל נדרשת להמשך התהליך');
+      }
+
       const { data, error } = await supabase.functions.invoke('cardcom-unified-payment', {
         body: payload
       });
 
       if (error) {
+        console.error('Supabase function error:', error);
         throw new Error(error.message || 'שגיאה ביצירת עסקה');
       }
 
@@ -85,12 +103,14 @@ export const usePaymentInitialization = (
         
         setPaymentUrl(data.url);
       } else {
+        console.error('Invalid response from payment function:', data);
         throw new Error('לא התקבלה כתובת תשלום מהשרת');
       }
     } catch (error: any) {
       console.error('Error initiating CardCom payment:', error);
-      setInitError(error.message || 'שגיאה ביצירת עסקה');
-      toast.error(error.message || 'שגיאה ביצירת עסקה');
+      const errorMessage = error.message || 'שגיאה ביצירת עסקה';
+      setInitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
