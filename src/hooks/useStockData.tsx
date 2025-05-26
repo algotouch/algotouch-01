@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { fetchStockIndices, type StockData } from '@/lib/api/stocks';
 
@@ -9,50 +9,60 @@ export function useStockDataWithRefresh(refreshInterval = 15000) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const { toast } = useToast();
 
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchStockIndices();
+      setStockData(data);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (err) {
+      setError('Failed to fetch stock data');
+      console.error(err);
+      toast({
+        title: "שגיאה בטעינת נתונים",
+        description: "לא ניתן להטעין את נתוני המדדים. נסה לרענן את הדף.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     let isMounted = true;
-    
-    const fetchData = async () => {
-      try {
-        if (!isMounted) return;
-        
-        setLoading(true);
-        const data = await fetchStockIndices();
-        
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const scheduleNextFetch = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => {
         if (isMounted) {
-          setStockData(data);
-          setLastUpdated(new Date());
-          setError(null);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError('Failed to fetch stock data');
-          console.error(err);
-          toast({
-            title: "שגיאה בטעינת נתונים",
-            description: "לא ניתן להטעין את נתוני המדדים. נסה לרענן את הדף.",
-            variant: "destructive",
+          fetchData().finally(() => {
+            if (isMounted) {
+              scheduleNextFetch();
+            }
           });
         }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+      }, refreshInterval);
     };
 
     // Initial fetch
-    fetchData();
+    fetchData().finally(() => {
+      if (isMounted) {
+        scheduleNextFetch();
+      }
+    });
 
-    // Set up interval for refreshing data
-    const intervalId = setInterval(fetchData, refreshInterval);
-
-    // Clean up interval on component unmount
+    // Cleanup function
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [refreshInterval, toast]);
+  }, [fetchData, refreshInterval]);
 
   return { stockData, loading, error, lastUpdated };
 } 
