@@ -1,6 +1,20 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.14.0";
+
+// CardCom IP whitelist
+const CARDCOM_IPS = [
+  '81.218.0.0/16',  // CardCom IP range
+  '81.219.0.0/16'   // CardCom IP range
+];
+
+// Rate limiting configuration
+const RATE_LIMIT = {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 100,    // 100 requests per minute
+};
+
+// In-memory store for rate limiting
+const requestCounts = new Map<string, { count: number; resetTime: number }>();
 
 // Configure CORS headers
 const corsHeaders = {
@@ -8,6 +22,52 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
+
+function isIpInRange(ip: string, cidr: string): boolean {
+  const [range, bits] = cidr.split('/');
+  const mask = ~((1 << (32 - parseInt(bits))) - 1);
+  const ipNum = ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
+  const rangeNum = range.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
+  return (ipNum & mask) === (rangeNum & mask);
+}
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = requestCounts.get(ip);
+
+  if (!record || now > record.resetTime) {
+    requestCounts.set(ip, { count: 1, resetTime: now + RATE_LIMIT.windowMs });
+    return true;
+  }
+
+  if (record.count >= RATE_LIMIT.maxRequests) {
+    return false;
+  }
+
+  record.count++;
+  return true;
+}
+
+function verifyCardcomRequest(req: Request): { allowed: boolean; reason?: string } {
+  // Get client IP
+  const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip');
+  if (!clientIp) {
+    return { allowed: false, reason: 'No client IP found in request' };
+  }
+
+  // Check rate limit
+  if (!checkRateLimit(clientIp)) {
+    return { allowed: false, reason: 'Rate limit exceeded' };
+  }
+
+  // Check if IP is in whitelist
+  const isAllowed = CARDCOM_IPS.some(cidr => isIpInRange(clientIp, cidr));
+  if (!isAllowed) {
+    return { allowed: false, reason: `Request from unauthorized IP: ${clientIp}` };
+  }
+
+  return { allowed: true };
+}
 
 // No auth verification needed for webhooks
 serve(async (req) => {
@@ -17,6 +77,19 @@ serve(async (req) => {
       headers: corsHeaders,
       status: 204,
     });
+  }
+
+  // Verify request is from CardCom
+  const verification = verifyCardcomRequest(req);
+  if (!verification.allowed) {
+    console.error('Unauthorized request:', verification.reason);
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized request', reason: verification.reason }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403
+      }
+    );
   }
 
   try {
@@ -42,11 +115,14 @@ serve(async (req) => {
       .insert({
         webhook_type: 'cardcom',
         payload: payload,
-        processed: false
+        processed: false,
+        client_ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
+        received_at: new Date().toISOString()
       });
     
     if (logError) {
       console.error('Error logging webhook:', logError);
+      throw logError;
     }
     
     // Process the webhook based on the payload data
@@ -307,46 +383,61 @@ async function processUserPayment(supabase: any, userId: string, payload: any) {
   const transactionInfo = payload.TranzactionInfo;
   const operation = payload.Operation;
 
-  // Update user's subscription status
-  const { error } = await supabase
-    .from('subscriptions')
-    .upsert({
-      user_id: userId,
-      status: (operation === "CreateTokenOnly") ? 'trial' : 'active',
-      payment_method: 'cardcom',
-      last_payment_date: new Date().toISOString(),
-      // If we have token information and it's a ChargeAndCreateToken or CreateTokenOnly operation
-      // then store the token in the payment_method column
-      payment_details: {
-        transaction_id: payload.TranzactionId,
-        low_profile_id: payload.LowProfileId,
-        amount: transactionInfo?.Amount || payload.Amount || 0,
-        response_code: payload.ResponseCode,
-        operation: operation,
-        card_info: transactionInfo ? {
-          last4: transactionInfo.Last4CardDigits,
-          expiry: `${transactionInfo.CardMonth}/${transactionInfo.CardYear}`,
-          card_name: transactionInfo.CardName,
-          card_type: transactionInfo.CardInfo
-        } : null,
-        token_info: tokenInfo ? {
-          token: tokenInfo.Token,
-          expiry: tokenInfo.TokenExDate,
-          approval: tokenInfo.TokenApprovalNumber
-        } : null
-      }
-    });
+  // Determine subscription status and period
+  let subscriptionStatus = 'active';
+  let currentPeriodEndsAt = new Date();
   
-  if (error) {
-    console.error('Error updating user subscription:', error);
-    throw new Error(`Failed to update subscription: ${error.message}`);
+  if (operation === "CreateTokenOnly") {
+    // Monthly plan with trial
+    subscriptionStatus = 'trial';
+    currentPeriodEndsAt.setDate(currentPeriodEndsAt.getDate() + 30); // 30 days trial
+  } else if (operation === "ChargeAndCreateToken") {
+    // Annual plan
+    currentPeriodEndsAt.setFullYear(currentPeriodEndsAt.getFullYear() + 1); // 1 year
+  } else if (operation === "ChargeOnly") {
+    // VIP plan - lifetime access
+    currentPeriodEndsAt.setFullYear(currentPeriodEndsAt.getFullYear() + 100); // Effectively lifetime
   }
 
-  // If we have token info, store it in recurring_payments table
-  if (tokenInfo && tokenInfo.Token) {
-    console.log(`Storing token for user: ${userId}, token: ${tokenInfo.Token}`);
+  try {
+    // Update user's subscription status
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .upsert({
+        user_id: userId,
+        status: subscriptionStatus,
+        payment_method: 'cardcom',
+        last_payment_date: new Date().toISOString(),
+        current_period_ends_at: currentPeriodEndsAt.toISOString(),
+        payment_details: {
+          transaction_id: payload.TranzactionId,
+          low_profile_id: payload.LowProfileId,
+          amount: transactionInfo?.Amount || payload.Amount || 0,
+          response_code: payload.ResponseCode,
+          operation: operation,
+          card_info: transactionInfo ? {
+            last4: transactionInfo.Last4CardDigits,
+            expiry: `${transactionInfo.CardMonth}/${transactionInfo.CardYear}`,
+            card_name: transactionInfo.CardName,
+            card_type: transactionInfo.CardInfo
+          } : null,
+          token_info: tokenInfo ? {
+            token: tokenInfo.Token,
+            expiry: tokenInfo.TokenExDate,
+            approval: tokenInfo.TokenApprovalNumber
+          } : null
+        }
+      });
     
-    try {
+    if (subscriptionError) {
+      console.error('Error updating user subscription:', subscriptionError);
+      throw new Error(`Failed to update subscription: ${subscriptionError.message}`);
+    }
+
+    // If we have token info, store it in recurring_payments table
+    if (tokenInfo && tokenInfo.Token) {
+      console.log(`Storing token for user: ${userId}`);
+      
       // Ensure all required fields are present and valid
       if (!tokenInfo.TokenExDate) {
         throw new Error('Missing TokenExDate in token information');
@@ -359,7 +450,7 @@ async function processUserPayment(supabase: any, userId: string, payload: any) {
           user_id: userId,
           token: tokenInfo.Token,
           token_expiry: parseCardcomDateString(tokenInfo.TokenExDate),
-          token_approval_number: tokenInfo.TokenApprovalNumber || '', // Ensure it's never null
+          token_approval_number: tokenInfo.TokenApprovalNumber || '',
           last_4_digits: transactionInfo?.Last4CardDigits || null,
           card_type: transactionInfo?.CardInfo || null,
           status: 'active',
@@ -369,24 +460,17 @@ async function processUserPayment(supabase: any, userId: string, payload: any) {
       if (tokenError) {
         console.error('Error storing token:', tokenError);
         throw new Error(`Failed to store token: ${tokenError.message}`);
-      } else {
-        console.log('Token stored successfully');
       }
-    } catch (tokenSaveError) {
-      console.error('Error in token storage:', tokenSaveError);
-      throw tokenSaveError;
+    } else if (payload.ResponseCode === 0 && (operation === "ChargeAndCreateToken" || operation === "CreateTokenOnly")) {
+      console.error('Missing TokenInfo in successful token operation', { operation, ResponseCode: payload.ResponseCode });
     }
-  } else if (payload.ResponseCode === 0 && (operation === "ChargeAndCreateToken" || operation === "CreateTokenOnly")) {
-    console.error('Missing TokenInfo in successful token operation', { operation, ResponseCode: payload.ResponseCode });
-  }
 
-  // Log the payment in user_payment_logs
-  try {
+    // Log the payment in user_payment_logs
     const { error: logError } = await supabase
       .from('user_payment_logs')
       .insert({
         user_id: userId,
-        subscription_id: userId, // Using user_id as subscription_id as per existing pattern
+        subscription_id: userId,
         token: payload.LowProfileId,
         amount: transactionInfo?.Amount || payload.Amount || 0,
         status: payload.ResponseCode === 0 ? 'payment_success' : 'payment_failed',
@@ -408,9 +492,13 @@ async function processUserPayment(supabase: any, userId: string, payload: any) {
       
     if (logError) {
       console.error('Error logging payment:', logError);
+      throw new Error(`Failed to log payment: ${logError.message}`);
     }
-  } catch (logSaveError) {
-    console.error('Error in payment logging:', logSaveError);
+
+    console.log(`Successfully processed payment for user: ${userId}`);
+  } catch (error) {
+    console.error('Error in processUserPayment:', error);
+    throw error;
   }
 }
 
@@ -421,118 +509,158 @@ async function processRegistrationPayment(supabase: any, regId: string, payload:
   // Extract the actual ID from the temp_reg_ prefix
   const actualId = regId.startsWith('temp_reg_') ? regId.substring(9) : regId;
   
-  // Mark the payment as verified in the registration data
   try {
-    const { error } = await supabase
+    // Get the registration data
+    const { data: regData, error: regError } = await supabase
       .from('temp_registration_data')
-      .update({ 
-        payment_verified: true,
+      .select('registration_data')
+      .eq('id', actualId)
+      .single();
+      
+    if (regError || !regData?.registration_data) {
+      console.error('Error retrieving registration data:', regError);
+      throw new Error('Registration data not found');
+    }
+
+    const registrationData = regData.registration_data;
+    const { email, userData } = registrationData;
+
+    // Create the user account
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: email,
+      email_confirm: true,
+      user_metadata: {
+        fullName: userData.fullName,
+        phone: userData.phone,
+        idNumber: userData.idNumber
+      }
+    });
+
+    if (authError || !authData.user) {
+      console.error('Error creating user account:', authError);
+      throw new Error('Failed to create user account');
+    }
+
+    const userId = authData.user.id;
+
+    // Determine subscription status and period
+    let subscriptionStatus = 'active';
+    let currentPeriodEndsAt = new Date();
+    
+    if (payload.Operation === "CreateTokenOnly") {
+      subscriptionStatus = 'trial';
+      currentPeriodEndsAt.setDate(currentPeriodEndsAt.getDate() + 30);
+    } else if (payload.Operation === "ChargeAndCreateToken") {
+      currentPeriodEndsAt.setFullYear(currentPeriodEndsAt.getFullYear() + 1);
+    } else if (payload.Operation === "ChargeOnly") {
+      currentPeriodEndsAt.setFullYear(currentPeriodEndsAt.getFullYear() + 100);
+    }
+
+    // Create subscription record
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .insert({
+        user_id: userId,
+        status: subscriptionStatus,
+        payment_method: 'cardcom',
+        last_payment_date: new Date().toISOString(),
+        current_period_ends_at: currentPeriodEndsAt.toISOString(),
         payment_details: {
           transaction_id: payload.TranzactionId,
           low_profile_id: payload.LowProfileId,
           amount: payload.Amount,
           response_code: payload.ResponseCode,
+          operation: payload.Operation,
           card_info: payload.TranzactionInfo ? {
             last4: payload.TranzactionInfo.Last4CardDigits,
-            expiry: `${payload.TranzactionInfo.CardMonth}/${payload.TranzactionInfo.CardYear}`
+            expiry: `${payload.TranzactionInfo.CardMonth}/${payload.TranzactionInfo.CardYear}`,
+            card_name: payload.TranzactionInfo.CardName,
+            card_type: payload.TranzactionInfo.CardInfo
           } : null,
           token_info: payload.TokenInfo ? {
             token: payload.TokenInfo.Token,
             expiry: payload.TokenInfo.TokenExDate,
             approval: payload.TokenInfo.TokenApprovalNumber
           } : null
+        }
+      });
+
+    if (subscriptionError) {
+      console.error('Error creating subscription:', subscriptionError);
+      throw new Error('Failed to create subscription');
+    }
+
+    // Store token if available
+    if (payload.TokenInfo?.Token) {
+      const { error: tokenError } = await supabase
+        .from('recurring_payments')
+        .insert({
+          user_id: userId,
+          token: payload.TokenInfo.Token,
+          token_expiry: parseCardcomDateString(payload.TokenInfo.TokenExDate),
+          token_approval_number: payload.TokenInfo.TokenApprovalNumber || '',
+          last_4_digits: payload.TranzactionInfo?.Last4CardDigits || null,
+          card_type: payload.TranzactionInfo?.CardInfo || null,
+          status: 'active',
+          is_valid: true
+        });
+
+      if (tokenError) {
+        console.error('Error storing token:', tokenError);
+        throw new Error('Failed to store payment token');
+      }
+    }
+
+    // Log the payment
+    const { error: logError } = await supabase
+      .from('user_payment_logs')
+      .insert({
+        user_id: userId,
+        subscription_id: userId,
+        token: payload.LowProfileId,
+        amount: payload.Amount,
+        status: payload.ResponseCode === 0 ? 'payment_success' : 'payment_failed',
+        transaction_id: payload.TranzactionId?.toString() || null,
+        payment_data: {
+          operation: payload.Operation,
+          response_code: payload.ResponseCode,
+          low_profile_id: payload.LowProfileId,
+          card_info: payload.TranzactionInfo ? {
+            last4: payload.TranzactionInfo.Last4CardDigits,
+            expiry: `${payload.TranzactionInfo.CardMonth}/${payload.TranzactionInfo.CardYear}`
+          } : null,
+          token_info: payload.TokenInfo ? {
+            token: payload.TokenInfo.Token,
+            expiry: payload.TokenInfo.TokenExDate
+          } : null
+        }
+      });
+
+    if (logError) {
+      console.error('Error logging payment:', logError);
+      throw new Error('Failed to log payment');
+    }
+
+    // Mark registration as processed
+    await supabase
+      .from('temp_registration_data')
+      .update({ 
+        payment_verified: true,
+        payment_processed: true,
+        user_id: userId,
+        payment_details: {
+          transaction_id: payload.TranzactionId,
+          low_profile_id: payload.LowProfileId,
+          amount: payload.Amount,
+          response_code: payload.ResponseCode,
+          operation: payload.Operation
         },
         updated_at: new Date().toISOString()
       })
       .eq('id', actualId);
-  
-    if (error) {
-      // If we couldn't find the record with the exact ID, try alternative formats
-      console.error('Error updating registration payment status:', error);
-      
-      // Try to find registration by partial match (without prefix)
-      const { data: regData, error: searchError } = await supabase
-        .from('temp_registration_data')
-        .select('id, registration_data')
-        .filter('id', 'ilike', `%${actualId.substring(0, 8)}%`)
-        .limit(1);
-      
-      if (!searchError && regData && regData.length > 0) {
-        // Found a matching registration
-        const matchedRegId = regData[0].id;
-        console.log(`Found matching registration ID: ${matchedRegId}`);
-        
-        // Update the found registration
-        const { error: updateError } = await supabase
-          .from('temp_registration_data')
-          .update({ 
-            payment_verified: true,
-            payment_details: {
-              transaction_id: payload.TranzactionId,
-              low_profile_id: payload.LowProfileId,
-              amount: payload.Amount,
-              response_code: payload.ResponseCode,
-              card_info: payload.TranzactionInfo ? {
-                last4: payload.TranzactionInfo.Last4CardDigits,
-                expiry: `${payload.TranzactionInfo.CardMonth}/${payload.TranzactionInfo.CardYear}`
-              } : null,
-              token_info: payload.TokenInfo ? {
-                token: payload.TokenInfo.Token,
-                expiry: payload.TokenInfo.TokenExDate,
-                approval: payload.TokenInfo.TokenApprovalNumber
-              } : null
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', matchedRegId);
-          
-        if (updateError) {
-          console.error('Error updating matched registration:', updateError);
-          throw updateError;
-        }
-      } else {
-        // Still can't find any matching registration, create a new one
-        if (payload.UIValues && payload.UIValues.CardOwnerEmail) {
-          console.log('Creating new temp registration with email:', payload.UIValues.CardOwnerEmail);
-          
-          const { error: insertError } = await supabase
-            .from('temp_registration_data')
-            .insert({
-              id: actualId,
-              registration_data: {
-                email: payload.UIValues.CardOwnerEmail,
-                userData: {
-                  fullName: payload.UIValues.CardOwnerName || '',
-                  phone: payload.UIValues.CardOwnerPhone || '',
-                  idNumber: payload.UIValues.CardOwnerIdentityNumber || ''
-                },
-                paymentToken: payload.TokenInfo ? {
-                  token: payload.TokenInfo.Token,
-                  expiry: payload.TokenInfo.TokenExDate,
-                  last4Digits: payload.TranzactionInfo?.Last4CardDigits || ''
-                } : null,
-                registrationTime: new Date().toISOString()
-              },
-              payment_verified: true,
-              payment_details: {
-                transaction_id: payload.TranzactionId,
-                low_profile_id: payload.LowProfileId,
-                amount: payload.Amount,
-                response_code: payload.ResponseCode,
-                operation: payload.Operation
-              },
-              expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-            });
-            
-          if (insertError) {
-            console.error('Error creating new registration:', insertError);
-            throw insertError;
-          }
-        } else {
-          throw error; // No way to create a registration without email
-        }
-      }
-    }
+
+    console.log(`Successfully processed registration payment for user: ${userId}`);
+    return userId;
   } catch (error) {
     console.error('Error processing registration payment:', error);
     throw error;

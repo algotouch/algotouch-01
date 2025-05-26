@@ -1,9 +1,12 @@
 import { CardcomPayload, CardcomWebhookPayload } from '@/types/payment';
+import { supabase } from '@/lib/supabase';
 
 export class PaymentMonitor {
   private static readonly ALLOWED_CHARS = /^[a-zA-Z0-9-_]+$/;
   private static readonly MAX_IDENTIFIER_LENGTH = 100;
   private static readonly MAX_SOURCE_LENGTH = 50;
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_DELAY = 1000; // 1 second
 
   private static sanitizeIdentifier(identifier: string): string {
     if (!identifier) return '';
@@ -39,6 +42,31 @@ export class PaymentMonitor {
     }
     
     return sanitized;
+  }
+
+  private static async logPaymentEvent(
+    level: 'info' | 'warn' | 'error',
+    message: string,
+    source: string,
+    data: any = {},
+    userId?: string | number,
+    transactionId?: string
+  ) {
+    try {
+      const sanitizedSource = this.sanitizeIdentifier(source.slice(0, this.MAX_SOURCE_LENGTH));
+      
+      await supabase.from('payment_logs').insert({
+        level,
+        message,
+        source: sanitizedSource,
+        data,
+        user_id: userId?.toString(),
+        transaction_id: transactionId,
+        created_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to log payment event:', error);
+    }
   }
 
   static startTracking(identifier: string) {
@@ -173,5 +201,198 @@ export class PaymentMonitor {
     });
     
     return sanitized;
+  }
+
+  static async monitorPayment(paymentId: string, maxRetries: number = this.MAX_RETRIES): Promise<boolean> {
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const { data: payment, error } = await supabase
+          .from('payment_webhooks')
+          .select('*')
+          .eq('payload->LowProfileId', paymentId)
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        if (!payment) {
+          await this.logPaymentEvent(
+            'warn',
+            `Payment not found: ${paymentId}`,
+            'payment-monitor',
+            { paymentId }
+          );
+          return false;
+        }
+
+        const payload = payment.payload as CardcomPayload;
+        
+        if (payload.ResponseCode === 0) {
+          await this.logPaymentEvent(
+            'info',
+            `Payment successful: ${paymentId}`,
+            'payment-monitor',
+            { paymentId, payload },
+            payload.ReturnValue,
+            payload.TranzactionId?.toString()
+          );
+          return true;
+        } else {
+          await this.logPaymentEvent(
+            'error',
+            `Payment failed: ${paymentId}`,
+            'payment-monitor',
+            { 
+              paymentId, 
+              payload,
+              error: payload.Description || 'Unknown error'
+            },
+            payload.ReturnValue,
+            payload.TranzactionId?.toString()
+          );
+          return false;
+        }
+      } catch (error) {
+        retryCount++;
+        await this.logPaymentEvent(
+          'error',
+          `Payment monitoring error (attempt ${retryCount}/${maxRetries})`,
+          'payment-monitor',
+          { 
+            paymentId,
+            error: error instanceof Error ? error.message : String(error),
+            retryCount
+          }
+        );
+
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * Math.pow(2, retryCount)));
+        }
+      }
+    }
+
+    return false;
+  }
+
+  static async verifySubscriptionStatus(userId: string): Promise<{
+    isActive: boolean;
+    subscriptionType: string;
+    expiresAt: string | null;
+  }> {
+    try {
+      const { data: subscription, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!subscription) {
+        await this.logPaymentEvent(
+          'warn',
+          `No subscription found for user: ${userId}`,
+          'subscription-monitor',
+          { userId }
+        );
+        return {
+          isActive: false,
+          subscriptionType: 'none',
+          expiresAt: null
+        };
+      }
+
+      const isActive = subscription.status === 'active' || subscription.status === 'trial';
+      const expiresAt = subscription.current_period_ends_at;
+
+      await this.logPaymentEvent(
+        'info',
+        `Subscription status checked for user: ${userId}`,
+        'subscription-monitor',
+        { 
+          userId,
+          status: subscription.status,
+          isActive,
+          expiresAt
+        }
+      );
+
+      return {
+        isActive,
+        subscriptionType: subscription.status,
+        expiresAt
+      };
+    } catch (error) {
+      await this.logPaymentEvent(
+        'error',
+        `Error checking subscription status`,
+        'subscription-monitor',
+        { 
+          userId,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      );
+      throw error;
+    }
+  }
+
+  static async handlePaymentFailure(
+    paymentId: string,
+    error: any,
+    context: {
+      userId?: string;
+      planId?: string;
+      amount?: number;
+    } = {}
+  ): Promise<void> {
+    try {
+      // Log the failure
+      await this.logPaymentEvent(
+        'error',
+        `Payment failed: ${paymentId}`,
+        'payment-failure-handler',
+        {
+          paymentId,
+          error: error instanceof Error ? error.message : String(error),
+          ...context
+        },
+        context.userId
+      );
+
+      // Notify user if we have their ID
+      if (context.userId) {
+        await supabase.from('notifications').insert({
+          user_id: context.userId,
+          type: 'payment_failed',
+          title: 'Payment Failed',
+          message: 'Your payment could not be processed. Please try again or contact support.',
+          data: {
+            paymentId,
+            planId: context.planId,
+            amount: context.amount
+          }
+        });
+      }
+
+      // Update payment status in database
+      await supabase
+        .from('payment_webhooks')
+        .update({
+          processed: true,
+          processing_result: {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            timestamp: new Date().toISOString()
+          }
+        })
+        .eq('payload->LowProfileId', paymentId);
+    } catch (logError) {
+      console.error('Error handling payment failure:', logError);
+    }
   }
 }
