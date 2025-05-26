@@ -355,14 +355,14 @@ serve(async (req) => {
       }
 
       try {
-        // Determine payment amount based on plan with proper USD to NIS conversion
+        // Determine payment amount based on plan
         let amount = '0.00';
         if (planId === 'monthly') {
-          amount = '375.00'; // 99 USD in NIS
+          amount = '371.00'; // ₪371 per month
         } else if (planId === 'annual') {
-          amount = '3410.00'; // 899 USD in NIS
+          amount = '3371.00'; // ₪3371 per year
         } else if (planId === 'vip') {
-          amount = '13270.00'; // 3499 USD in NIS
+          amount = '13121.00'; // ₪13121 one-time
         }
 
         // Generate webhook URL using the current origin

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,16 +26,12 @@ export const usePaymentInitialization = (
   }, []);
 
   const initiateCardcomPayment = async () => {
-    // Reset states before starting
     setIsLoading(true);
     setInitError(null);
     
     try {
       // Define operation types based on plan
-      // 1: ChargeOnly - for one-time VIP payment
-      // 2: ChargeAndCreateToken - for annual with immediate charge and future charges
-      // 3: CreateTokenOnly - for monthly with trial (no initial charge)
-      let operationType = 2; // Changed to ChargeAndCreateToken for monthly
+      let operationType = 3; // Default to CreateTokenOnly for monthly plan
       
       if (selectedPlan === 'annual') {
         operationType = 2; // Charge and create token
@@ -61,6 +56,27 @@ export const usePaymentInitialization = (
       const userPhone = userData?.phone || registrationData?.userData?.phone || '';
       const userIdNumber = userData?.idNumber || registrationData?.userData?.idNumber || '';
 
+      // Validate required fields
+      if (!userFullName || !userEmail) {
+        toast.error('נדרשים שם מלא וכתובת אימייל');
+        setInitError('חסרים פרטים נדרשים');
+        return;
+      }
+
+      // Get plan amount based on selected plan
+      const getPlanAmount = (plan: string) => {
+        switch (plan) {
+          case 'monthly':
+            return '371.00'; // ₪371 per month
+          case 'annual':
+            return '3371.00'; // ₪3371 per year
+          case 'vip':
+            return '13121.00'; // ₪13121 one-time
+          default:
+            return '0.00';
+        }
+      };
+
       // Log payment initialization parameters for debugging
       console.log('Payment initialization parameters:', {
         plan: selectedPlan,
@@ -74,11 +90,35 @@ export const usePaymentInitialization = (
       });
 
       // Set the webhook URL to the full Supabase Edge Function URL
-      const webhookUrl = `https://ndhakvhrrkczgylcmyoc.supabase.co/functions/v1/cardcom-webhook`;
+      const webhookUrl = `${window.location.origin}/functions/v1/cardcom-webhook`;
 
       // Generate a temp registration ID with consistent format
-      // Always use temp_reg_ prefix for guest checkout ReturnValue for consistency with webhook
       const tempRegistrationId = user?.id || `temp_reg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      // Store registration data temporarily if this is a new user
+      if (!user && registrationData) {
+        try {
+          const { error: storageError } = await supabase
+            .from('temp_registration_data')
+            .insert({
+              id: tempRegistrationId,
+              registration_data: {
+                ...registrationData,
+                paymentToken: null,
+                registrationTime: new Date().toISOString()
+              },
+              expires_at: new Date(Date.now() + 30 * 60000).toISOString() // 30 min expiry
+            });
+
+          if (storageError) {
+            console.error('Error storing temp registration:', storageError);
+            throw new Error('Failed to store registration data');
+          }
+        } catch (error) {
+          console.error('Error in temp registration storage:', error);
+          throw new Error('Error storing registration data');
+        }
+      }
 
       // Prepare payload based on whether user is logged in or not
       const payload = {
@@ -90,16 +130,13 @@ export const usePaymentInitialization = (
         origin: window.location.origin,
         amount: getPlanAmount(selectedPlan),
         webHookUrl: webhookUrl,
-        // Include registration data for account creation after payment
         registrationData: registrationData,
-        // Add user details for payment form pre-fill
         userDetails: {
           fullName: userFullName,
           email: userEmail,
           phone: userPhone,
           idNumber: userIdNumber
         },
-        // Ensure we pass ReturnValue with user ID or standardized temp ID
         returnValue: tempRegistrationId
       };
 
@@ -108,6 +145,7 @@ export const usePaymentInitialization = (
       });
 
       if (error) {
+        console.error('Cardcom payment initialization error:', error);
         throw new Error(error.message || 'שגיאה ביצירת עסקה');
       }
 
