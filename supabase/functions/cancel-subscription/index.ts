@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.14.0";
 
@@ -142,13 +141,51 @@ serve(async (req) => {
       }
     }
     
-    // If there's a payment token, deactivate it
+    // If there's a payment token, deactivate it and cancel recurring in Cardcom
     if (subscription.payment_token_id) {
+      // Get the token value from payment_tokens table
+      const { data: tokenRow, error: tokenFetchError } = await supabaseClient
+        .from('payment_tokens')
+        .select('token')
+        .eq('id', subscription.payment_token_id)
+        .single();
+      if (tokenFetchError) {
+        console.error('Error fetching payment token:', tokenFetchError);
+      }
+      if (tokenRow?.token) {
+        // קריאה ל-Cardcom לביטול recurring
+        try {
+          const cardcomTerminal = Deno.env.get('NEXT_PUBLIC_CARDCOM_TERMINAL') || Deno.env.get('NEXT_PUBLIC_CARDCOM_TEST_TERMINAL');
+          const cardcomUser = Deno.env.get('NEXT_PUBLIC_CARDCOM_USERNAME') || Deno.env.get('NEXT_PUBLIC_CARDCOM_TEST_USERNAME');
+          const cardcomPass = Deno.env.get('NEXT_PUBLIC_CARDCOM_PASSWORD') || Deno.env.get('NEXT_PUBLIC_CARDCOM_TEST_PASSWORD');
+          const cardcomBaseUrl = 'https://secure.cardcom.solutions/api/v11';
+          const cancelUrl = `${cardcomBaseUrl}/Token/Cancel`;
+          const cancelPayload = {
+            TerminalNumber: cardcomTerminal,
+            ApiName: cardcomUser,
+            ApiPassword: cardcomPass,
+            Token: tokenRow.token
+          };
+          const cardcomRes = await fetch(cancelUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cancelPayload)
+          });
+          const cardcomData = await cardcomRes.json();
+          if (cardcomData.ResponseCode !== 0) {
+            console.error('Cardcom recurring cancel failed:', cardcomData);
+          } else {
+            console.log('Cardcom recurring cancelled successfully:', cardcomData);
+          }
+        } catch (cardcomError) {
+          console.error('Error cancelling recurring in Cardcom:', cardcomError);
+        }
+      }
+      // Update token status in DB
       const { error: tokenError } = await supabaseClient
         .from('payment_tokens')
         .update({ is_active: false })
         .eq('id', subscription.payment_token_id);
-        
       if (tokenError) {
         console.error('Error deactivating payment token:', tokenError);
         // Continue even if this fails
