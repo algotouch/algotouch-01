@@ -236,69 +236,84 @@ function App() {
         <BrowserRouter>
           <ReactErrorBoundary fallbackMessage="שגיאה בטעינת ספקי הקונטקסט">
             <ContextErrorBoundary contextName="ThemeProvider">
-              <ThemeProvider>
-                <ContextErrorBoundary contextName="DirectionProvider">
-                  <DirectionProvider dir="rtl">
-                    <ContextErrorBoundary contextName="AuthProvider">
-                      <SafeAuthProvider>
-                        <ContextErrorBoundary contextName="StockDataProvider">
-                          <ErrorBoundary fallback={
-                            <div className="p-4 text-center">
-                              <p className="text-orange-600 mb-2">בעיה זמנית בטעינת נתוני מדדים</p>
-                              <p className="text-sm text-muted-foreground">האפליקציה תמשיך לפעול בצורה רגילה</p>
-                            </div>
-                          }>
-                            <StockDataProvider refreshInterval={30000}>
-                              <ReactErrorBoundary fallbackMessage="שגיאה בטעינת המסלולים">
-                                <Suspense fallback={<LoadingPage />}>
-                                  <Routes>
-                                    {/* Auth Error Route */}
-                                    <Route path="/auth-error" element={<AuthLoadError />} />
-                                    
-                                    {/* Public routes */}
-                                    <Route path="/auth" element={<Auth />} />
-                                    
-                                    {/* Payment routes */}
-                                    <Route path="/payment/redirect" element={<IframeRedirect />} />
-                                    <Route path="/payment/success" element={<PaymentSuccess />} />
-                                    <Route path="/payment/failed" element={<PaymentFailed />} />
-                                    
-                                    {/* Protected routes */}
-                                    <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-                                      <Route path="/dashboard" element={<Dashboard />} />
-                                      <Route path="/subscription" element={<Subscription />} />
-                                      <Route path="/community" element={<Community />} />
-                                      <Route path="/courses" element={<Courses />} />
-                                      <Route path="/courses/:courseId" element={<CourseDetail />} />
-                                      <Route path="/account" element={<Account />} />
-                                      <Route path="/monthly-report" element={<MonthlyReport />} />
-                                      <Route path="/calendar" element={<Calendar />} />
-                                      <Route path="/trade-journal" element={<TradeJournal />} />
-                                      <Route path="/journal" element={<Journal />} />
-                                      <Route path="/profile" element={<Profile />} />
-                                      <Route path="/new-trade" element={<NewTrade />} />
-                                      <Route path="/blog" element={<Blog />} />
-                                      <Route path="/blog/:id" element={<BlogPost />} />
-                                      <Route path="/ai-assistant" element={<AIAssistant />} />
-                                      <Route path="/contract/:contractId" element={<ContractDetails />} />
-                                      <Route path="/my-subscription" element={<MySubscriptionPage />} />
-                                    </Route>
-                                    
-                                    {/* Default & catch-all routes */}
-                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                    <Route path="*" element={<NotFound />} />
-                                  </Routes>
-                                </Suspense>
-                              </ReactErrorBoundary>
-                            </StockDataProvider>
-                          </ErrorBoundary>
-                          <Toaster richColors position="top-center" dir="rtl" />
-                        </ContextErrorBoundary>
-                      </SafeAuthProvider>
-                    </ContextErrorBoundary>
-                  </DirectionProvider>
-                </ContextErrorBoundary>
-              </ThemeProvider>
+              <ErrorBoundary fallback={
+                <div className="min-h-screen flex items-center justify-center p-4">
+                  <div className="text-center space-y-4">
+                    <h2 className="text-xl font-bold">בעיה זמנית עם הערכת הנושא</h2>
+                    <p className="text-muted-foreground">האפליקציה תמשיך לפעול במצב בסיסי</p>
+                    <button 
+                      onClick={() => window.location.reload()}
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                      רענן דף
+                    </button>
+                  </div>
+                </div>
+              }>
+                <ThemeProvider>
+                  <ContextErrorBoundary contextName="DirectionProvider">
+                    <DirectionProvider dir="rtl">
+                      <ContextErrorBoundary contextName="AuthProvider">
+                        <SafeAuthProvider>
+                          <ContextErrorBoundary contextName="StockDataProvider">
+                            <ErrorBoundary fallback={
+                              <div className="p-4 text-center">
+                                <p className="text-orange-600 mb-2">בעיה זמנית בטעינת נתוני מדדים</p>
+                                <p className="text-sm text-muted-foreground">האפליקציה תמשיך לפעול בצורה רגילה</p>
+                              </div>
+                            }>
+                              <StockDataProvider refreshInterval={30000}>
+                                <ReactErrorBoundary fallbackMessage="שגיאה בטעינת המסלולים">
+                                  <Suspense fallback={<LoadingPage />}>
+                                    <Routes>
+                                      {/* Auth Error Route */}
+                                      <Route path="/auth-error" element={<AuthLoadError />} />
+                                      
+                                      {/* Public routes */}
+                                      <Route path="/auth" element={<Auth />} />
+                                      
+                                      {/* Payment routes */}
+                                      <Route path="/payment/redirect" element={<IframeRedirect />} />
+                                      <Route path="/payment/success" element={<PaymentSuccess />} />
+                                      <Route path="/payment/failed" element={<PaymentFailed />} />
+                                      
+                                      {/* Protected routes */}
+                                      <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
+                                        <Route path="/dashboard" element={<Dashboard />} />
+                                        <Route path="/subscription" element={<Subscription />} />
+                                        <Route path="/community" element={<Community />} />
+                                        <Route path="/courses" element={<Courses />} />
+                                        <Route path="/courses/:courseId" element={<CourseDetail />} />
+                                        <Route path="/account" element={<Account />} />
+                                        <Route path="/monthly-report" element={<MonthlyReport />} />
+                                        <Route path="/calendar" element={<Calendar />} />
+                                        <Route path="/trade-journal" element={<TradeJournal />} />
+                                        <Route path="/journal" element={<Journal />} />
+                                        <Route path="/profile" element={<Profile />} />
+                                        <Route path="/new-trade" element={<NewTrade />} />
+                                        <Route path="/blog" element={<Blog />} />
+                                        <Route path="/blog/:id" element={<BlogPost />} />
+                                        <Route path="/ai-assistant" element={<AIAssistant />} />
+                                        <Route path="/contract/:contractId" element={<ContractDetails />} />
+                                        <Route path="/my-subscription" element={<MySubscriptionPage />} />
+                                      </Route>
+                                      
+                                      {/* Default & catch-all routes */}
+                                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                      <Route path="*" element={<NotFound />} />
+                                    </Routes>
+                                  </Suspense>
+                                </ReactErrorBoundary>
+                              </StockDataProvider>
+                            </ErrorBoundary>
+                            <Toaster richColors position="top-center" dir="rtl" />
+                          </ContextErrorBoundary>
+                        </SafeAuthProvider>
+                      </ContextErrorBoundary>
+                    </DirectionProvider>
+                  </ContextErrorBoundary>
+                </ThemeProvider>
+              </ErrorBoundary>
             </ContextErrorBoundary>
           </ReactErrorBoundary>
         </BrowserRouter>

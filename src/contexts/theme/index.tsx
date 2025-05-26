@@ -1,19 +1,25 @@
 
 import React from 'react';
-import { ThemeProvider as NextThemesProvider } from 'next-themes';
+import SafeThemeProvider from './SafeThemeProvider';
 
 const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <NextThemesProvider 
-      attribute="class" 
-      defaultTheme="dark" 
-      enableSystem={false}
-      storageKey="theme"
-    >
-      {children}
-    </NextThemesProvider>
-  );
+  return <SafeThemeProvider>{children}</SafeThemeProvider>;
 };
 
-export { ThemeProvider };
-export { useTheme } from 'next-themes';
+// Safe theme hook with fallback
+const useTheme = () => {
+  try {
+    const { useTheme: useNextThemes } = require('next-themes');
+    return useNextThemes();
+  } catch (error) {
+    console.warn('useTheme: next-themes not available, using fallback');
+    return {
+      theme: 'dark',
+      setTheme: () => {},
+      systemTheme: 'dark',
+      themes: ['light', 'dark']
+    };
+  }
+};
+
+export { ThemeProvider, useTheme };

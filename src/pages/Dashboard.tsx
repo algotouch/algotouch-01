@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import BlogSection from '@/components/BlogSection';
 import { useStockData } from '@/contexts/stock/StockDataContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const StockIndicesSection = () => {
   const { stockData, loading, error, lastUpdated } = useStockData();
@@ -61,7 +62,16 @@ const StockIndicesSection = () => {
           <TrendingUp size={18} className="text-primary" />
           <span>מדדים בזמן אמת</span>
           {error && (
-            <AlertCircle className="h-4 w-4 text-orange-500 ml-2" title="נתונים לדוגמה" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <AlertCircle className="h-4 w-4 text-orange-500 ml-2" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>נתונים לדוגמה</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </h2>
         <div className="flex items-center text-sm text-muted-foreground">
