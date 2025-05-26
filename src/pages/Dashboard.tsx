@@ -3,9 +3,9 @@ import React from 'react';
 import Layout from '@/components/Layout';
 import Courses from '@/components/Courses';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowUpRight, ArrowDownRight, TrendingUp, RefreshCw, Clock, BookOpen, Newspaper } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, TrendingUp, RefreshCw, Clock, BookOpen, Newspaper, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import BlogSection from '@/components/BlogSection';
 import { useStockData } from '@/contexts/stock/StockDataContext';
@@ -18,6 +18,41 @@ const StockIndicesSection = () => {
   const formattedStocksLastUpdated = lastUpdated 
     ? format(lastUpdated, 'HH:mm:ss')
     : 'לא ידוע';
+
+  // Handle error state with fallback
+  if (error && stockData.length === 0) {
+    return (
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <TrendingUp size={18} className="text-primary" />
+            <span>מדדים בזמן אמת</span>
+          </h2>
+        </div>
+        
+        <Card className="p-6 border-orange-300 bg-orange-50 dark:bg-orange-900/10">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertCircle className="h-5 w-5 text-orange-600" />
+            <p className="text-orange-800 dark:text-orange-400 font-medium">
+              בעיה זמנית בטעינת נתוני מדדים
+            </p>
+          </div>
+          <p className="text-orange-700 dark:text-orange-300 text-sm mb-4">
+            נתוני המדדים יוצגו כנתונים לדוגמה. האפליקציה תנסה לטעון נתונים אמיתיים שוב בעוד מספר דקות.
+          </p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            variant="outline" 
+            size="sm"
+            className="border-orange-300 text-orange-700 hover:bg-orange-100"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            רענן נתונים
+          </Button>
+        </Card>
+      </div>
+    );
+  }
     
   return (
     <div className="mb-8">
@@ -25,6 +60,9 @@ const StockIndicesSection = () => {
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <TrendingUp size={18} className="text-primary" />
           <span>מדדים בזמן אמת</span>
+          {error && (
+            <AlertCircle className="h-4 w-4 text-orange-500 ml-2" title="נתונים לדוגמה" />
+          )}
         </h2>
         <div className="flex items-center text-sm text-muted-foreground">
           <Clock size={14} className="mr-1" />
@@ -45,10 +83,6 @@ const StockIndicesSection = () => {
             </Card>
           ))}
         </div>
-      ) : error ? (
-        <Card className="p-4 border-red-300 bg-red-50 dark:bg-red-900/10">
-          <p className="text-red-600 dark:text-red-400">שגיאה בטעינת נתוני המדדים. נסה לרענן את הדף.</p>
-        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {stockData.map((index) => (

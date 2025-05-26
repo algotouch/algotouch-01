@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { fetchStockIndices } from '@/lib/api/stockService';
 
 type StockData = {
@@ -20,28 +20,45 @@ export function useStockDataWithRefresh(refreshInterval = 15000) {
 
   useEffect(() => {
     let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
     
     const fetchData = async () => {
       try {
         if (!isMounted) return;
         
-        setLoading(true);
+        console.log('useStockData: Fetching stock data...');
         const data = await fetchStockIndices();
         
         if (isMounted) {
           setStockData(data);
           setLastUpdated(new Date());
           setError(null);
+          retryCount = 0; // Reset retry count on success
+          console.log('useStockData: Successfully loaded stock data:', data.length, 'items');
         }
       } catch (err) {
+        console.error('useStockData: Error fetching stock data:', err);
+        
         if (isMounted) {
-          setError('Failed to fetch stock data');
-          console.error(err);
-          toast({
-            title: "שגיאה בטעינת נתונים",
-            description: "לא ניתן להטעין את נתוני המדדים. נסה לרענן את הדף.",
-            variant: "destructive",
-          });
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            console.log(`useStockData: Retrying in 2 seconds (attempt ${retryCount}/${maxRetries})`);
+            setTimeout(() => {
+              if (isMounted) {
+                fetchData();
+              }
+            }, 2000);
+          } else {
+            setError('Failed to fetch stock data after multiple attempts');
+            // Only show toast if we've exhausted all retries
+            toast({
+              title: "בעיה בטעינת נתוני מדדים",
+              description: "נתוני המדדים יוצגו כנתונים לדוגמה. נסה לרענן את הדף.",
+              variant: "destructive",
+            });
+          }
         }
       } finally {
         if (isMounted) {
@@ -50,15 +67,22 @@ export function useStockDataWithRefresh(refreshInterval = 15000) {
       }
     };
 
+    // Initial fetch
     fetchData();
 
-    const intervalId = setInterval(fetchData, refreshInterval);
+    // Set up interval for refreshing data - but only if not in error state
+    const intervalId = setInterval(() => {
+      if (!error) {
+        fetchData();
+      }
+    }, refreshInterval);
 
+    // Clean up interval on component unmount
     return () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [refreshInterval, toast]);
+  }, [refreshInterval, toast, error]);
 
   return { stockData, loading, error, lastUpdated };
 }
