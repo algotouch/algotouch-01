@@ -1,15 +1,15 @@
-import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { fetchStockIndices, type StockData } from '@/lib/api/stocks';
 
 export function useStockDataWithRefresh(refreshInterval = 15000) {
-  const [stockData, setStockData] = React.useState<StockData[]>([]);
-  const [loading, setLoading] = React.useState<boolean>(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
+  const [stockData, setStockData] = useState<StockData[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const { toast } = useToast();
 
-  React.useEffect(() => {
+  useEffect(() => {
     let isMounted = true;
     
     const fetchData = async () => {
