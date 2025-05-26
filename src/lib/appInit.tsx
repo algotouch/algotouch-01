@@ -1,4 +1,3 @@
-
 /**
  * Application initialization and setup
  */
@@ -13,6 +12,9 @@ import {
   setupPeriodicUpdates
 } from './serviceWorkerInit';
 
+// Create a root element for React
+let root: ReturnType<typeof createRoot> | null = null;
+
 /**
  * Initialize the React application
  */
@@ -25,7 +27,11 @@ export function initializeApp(): void {
     }
 
     // Create root once and render the app
-    const root = createRoot(rootElement);
+    if (!root) {
+      root = createRoot(rootElement);
+    }
+
+    // Render the app with all necessary providers
     root.render(
       <StrictMode>
         <ThemeProvider>

@@ -1,14 +1,6 @@
-
 import React, { createContext, useContext } from 'react';
-import { useStockDataWithRefresh } from '@/lib/api/stocks';
-
-type StockData = {
-  symbol: string;
-  price: string;
-  change: string;
-  changePercent: string;
-  isPositive: boolean;
-};
+import { useStockDataWithRefresh } from '@/hooks/useStockData';
+import type { StockData } from '@/lib/api/stocks';
 
 interface StockDataContextType {
   stockData: StockData[];
