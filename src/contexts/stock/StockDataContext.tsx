@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext } from 'react';
-import { useStockDataWithRefresh } from '@/lib/api/stocks';
+import { useStockDataWithRefresh } from '@/hooks/useStockData';
 
 type StockData = {
   symbol: string;

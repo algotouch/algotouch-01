@@ -12,10 +12,9 @@ interface PaymentRequest {
   userId?: string
   fullName: string
   email: string
-  operationType: number
+  phone?: string
+  idNumber?: string
   origin: string
-  amount: number
-  webHookUrl: string
   registrationData?: any
   userDetails?: {
     fullName: string
@@ -23,9 +22,14 @@ interface PaymentRequest {
     phone: string
     idNumber: string
   }
-  returnValue: string
+}
+
+interface PlanDetails {
+  operationType: number
+  amount: number
   hasTrial?: boolean
   trialDays?: number
+  recurringAmount?: number
 }
 
 serve(async (req) => {
@@ -44,15 +48,11 @@ serve(async (req) => {
       userId, 
       fullName, 
       email, 
-      operationType, 
+      phone,
+      idNumber,
       origin, 
-      amount, 
-      webHookUrl, 
       registrationData, 
-      userDetails,
-      returnValue,
-      hasTrial,
-      trialDays 
+      userDetails 
     }: PaymentRequest = await req.json()
 
     // Get CardCom credentials
@@ -64,7 +64,20 @@ serve(async (req) => {
       throw new Error('CardCom credentials not configured')
     }
 
-    console.log(`Creating CardCom payment session with terminal: ${terminalNumber}, operation: ${getOperationName(operationType)}, amount: ${amount}`)
+    // Get plan details with updated pricing strategy
+    const planDetails = getPlanDetails(planId)
+    
+    // Generate unique return value for tracking
+    const tempRegistrationId = userId || `temp_reg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    
+    console.log(`Creating CardCom payment for plan: ${planId}`, {
+      operationType: planDetails.operationType,
+      amount: planDetails.amount,
+      hasTrial: planDetails.hasTrial,
+      email: email
+    })
+
+    const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/cardcom-webhook-unified`
 
     // Prepare CardCom API payload
     const cardcomPayload = {
@@ -72,37 +85,32 @@ serve(async (req) => {
       ApiName: apiName,
       APIPassword: apiPassword,
       CoinId: 1, // ILS
-      SumToBill: amount, // Use correct amount from plan
-      Operation: operationType, // Use correct operation type
-      ReturnValue: returnValue,
+      SumToBill: planDetails.amount,
+      Operation: planDetails.operationType,
+      ReturnValue: tempRegistrationId,
       SuccessRedirectUrl: `${origin}/payment/success`,
       ErrorRedirectUrl: `${origin}/payment/failed`, 
       CancelRedirectUrl: `${origin}/subscription`,
-      WebHookUrl: webHookUrl,
+      WebHookUrl: webhookUrl,
       MaxNumOfPayments: 1,
       UseCardholderName: true,
-      // Pre-fill user details
       CardOwnerName: userDetails?.fullName || fullName || '',
       CardOwnerEmail: userDetails?.email || email || '',
-      CardOwnerPhone: userDetails?.phone || '',
-      CardOwnerID: userDetails?.idNumber || '',
-      // Set language to Hebrew
+      CardOwnerPhone: userDetails?.phone || phone || '',
+      CardOwnerID: userDetails?.idNumber || idNumber || '',
       Language: "he",
       UTF8: true
     }
 
-    console.log('Sending payload with user details:', {
-      name: cardcomPayload.CardOwnerName,
+    console.log('Sending CardCom payload:', {
+      operation: getOperationName(planDetails.operationType),
+      amount: planDetails.amount,
       email: cardcomPayload.CardOwnerEmail,
-      phone: cardcomPayload.CardOwnerPhone,
-      idNumber: cardcomPayload.CardOwnerID,
-      operation: getOperationName(operationType),
-      amount: amount,
-      webhookUrl: webHookUrl
+      webhookUrl: webhookUrl
     })
 
     // Call CardCom API
-    const response = await fetch('https://secure.cardcom.solutions/api/v1/LowProfile/Create', {
+    const response = await fetch('https://secure.cardcom.solutions/api/v11/LowProfile/Create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -110,10 +118,15 @@ serve(async (req) => {
       body: JSON.stringify(cardcomPayload)
     })
 
+    if (!response.ok) {
+      throw new Error(`CardCom API returned ${response.status}: ${response.statusText}`)
+    }
+
     const cardcomResponse = await response.json()
+    console.log('CardCom response:', cardcomResponse)
 
     if (cardcomResponse.ResponseCode !== 0) {
-      throw new Error(`CardCom error: ${cardcomResponse.Description}`)
+      throw new Error(`CardCom error (${cardcomResponse.ResponseCode}): ${cardcomResponse.Description || 'Unknown error'}`)
     }
 
     const lowProfileId = cardcomResponse.LowProfileId
@@ -127,17 +140,18 @@ serve(async (req) => {
           id: crypto.randomUUID(),
           user_id: userId || null,
           plan_id: planId,
-          amount: amount,
+          amount: planDetails.amount,
           currency: 'ILS',
           status: 'initiated',
           low_profile_id: lowProfileId,
-          operation_type: getOperationName(operationType),
-          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+          operation_type: getOperationName(planDetails.operationType),
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           payment_details: {
-            operationType,
+            operationType: planDetails.operationType,
             planId,
-            hasTrial,
-            trialDays,
+            hasTrial: planDetails.hasTrial,
+            trialDays: planDetails.trialDays || 0,
+            recurringAmount: planDetails.recurringAmount || 0,
             userDetails: userDetails || {},
             registrationData: registrationData || {}
           },
@@ -150,11 +164,28 @@ serve(async (req) => {
 
       if (sessionError) {
         console.error('Error saving payment session:', sessionError)
-        // Don't fail the payment creation, just log the error
       }
     } catch (dbError) {
       console.error('Database error:', dbError)
-      // Continue with payment URL generation
+    }
+
+    // Store registration data for guest users
+    if (!userId && registrationData) {
+      try {
+        await supabase
+          .from('temp_registration_data')
+          .insert({
+            id: tempRegistrationId,
+            registration_data: registrationData,
+            payment_session_id: lowProfileId,
+            expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+            step_completed: 'payment_initiated'
+          })
+        
+        console.log('Stored temporary registration data:', tempRegistrationId)
+      } catch (tempError) {
+        console.error('Error storing temp registration:', tempError)
+      }
     }
 
     // Return the payment URL
@@ -163,7 +194,9 @@ serve(async (req) => {
         success: true,
         url: cardcomResponse.URL,
         lowProfileId: lowProfileId,
-        sessionId: crypto.randomUUID()
+        sessionId: tempRegistrationId,
+        operationType: planDetails.operationType,
+        amount: planDetails.amount
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -185,6 +218,36 @@ serve(async (req) => {
     )
   }
 })
+
+function getPlanDetails(planId: string): PlanDetails {
+  switch (planId) {
+    case 'monthly':
+      return {
+        operationType: 2, // ChargeAndCreateToken - charge 1₪ first month + token
+        amount: 100, // 1₪ for card validation (in agorot)
+        hasTrial: false, // No trial, just reduced first payment
+        recurringAmount: 37100 // 371₪ for subsequent months
+      };
+    case 'annual':
+      return {
+        operationType: 2, // ChargeAndCreateToken - immediate charge + token
+        amount: 337100, // 3,371₪ in agorot
+        hasTrial: false
+      };
+    case 'vip':
+      return {
+        operationType: 1, // ChargeOnly - one-time payment
+        amount: 1312100, // 13,121₪ in agorot
+        hasTrial: false
+      };
+    default:
+      return {
+        operationType: 2,
+        amount: 100,
+        hasTrial: false
+      };
+  }
+}
 
 function getOperationName(operationType: number): string {
   switch (operationType) {

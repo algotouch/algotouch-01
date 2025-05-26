@@ -24,6 +24,7 @@ export function DirectionProvider({
   dir = 'rtl', // Default to RTL based on your app's Hebrew language
   children,
 }: DirectionProviderProps) {
+  // Safe to use useMemo since ReactReadyProvider ensures React is ready
   const value = useMemo(() => ({ dir }), [dir]);
   
   return (
