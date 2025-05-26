@@ -3,7 +3,6 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Spinner } from '@/components/ui/spinner';
-import { ReactReadyProvider } from '@/contexts/ReactReadyProvider';
 import { ThemeProvider } from '@/contexts/theme';
 import { AuthProvider } from '@/contexts/auth';
 import { DirectionProvider } from '@/contexts/direction/DirectionProvider';
@@ -20,78 +19,32 @@ import PaymentFailed from '@/pages/PaymentFailed';
 import NotFound from '@/pages/NotFound';
 import AuthLoadError from '@/pages/AuthLoadError';
 
-// Lazy loaded routes with retry utility
-const loadModuleWithRetry = (importFn, name) => {
-  console.log(`Loading module: ${name}`);
-  return importFn().catch(error => {
-    console.error(`Error loading ${name}:`, error);
-    throw error;
-  });
-};
+// Lazy loaded routes
+const Subscription = lazy(() => import('@/pages/Subscription'));
+const Community = lazy(() => import('@/pages/Community'));
+const Courses = lazy(() => import('@/pages/Courses'));
+const CourseDetail = lazy(() => import('@/pages/CourseDetail'));
+const Account = lazy(() => import('@/pages/Account'));
+const MonthlyReport = lazy(() => import('@/pages/MonthlyReport'));
+const Calendar = lazy(() => import('@/pages/Calendar'));
+const TradeJournal = lazy(() => import('@/pages/TradeJournal'));
+const Journal = lazy(() => import('@/pages/Journal'));
+const Profile = lazy(() => import('@/pages/Profile'));
+const NewTrade = lazy(() => import('@/pages/NewTrade'));
+const Blog = lazy(() => import('@/pages/Blog'));
+const BlogPost = lazy(() => import('@/pages/BlogPost'));
+const AIAssistant = lazy(() => import('@/pages/AIAssistant'));
+const ContractDetails = lazy(() => import('@/pages/ContractDetails'));
+const MySubscriptionPage = lazy(() => import('@/pages/MySubscriptionPage'));
 
-// Lazy loaded less critical routes
-const Subscription = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Subscription'), 'Subscription')
-);
-
-const Community = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Community'), 'Community')
-);
-
-const Courses = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Courses'), 'Courses')
-);
-
-const CourseDetail = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/CourseDetail'), 'CourseDetail')
-);
-
-const Account = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Account'), 'Account')
-);
-
-const MonthlyReport = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/MonthlyReport'), 'MonthlyReport')
-);
-const Calendar = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Calendar'), 'Calendar')
-);
-const TradeJournal = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/TradeJournal'), 'TradeJournal')
-);
-const Journal = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Journal'), 'Journal')
-);
-const Profile = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Profile'), 'Profile')
-);
-const NewTrade = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/NewTrade'), 'NewTrade')
-);
-const Blog = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/Blog'), 'Blog')
-);
-const BlogPost = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/BlogPost'), 'BlogPost')
-);
-const AIAssistant = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/AIAssistant'), 'AIAssistant')
-);
-const ContractDetails = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/ContractDetails'), 'ContractDetails')
-);
-const MySubscriptionPage = lazy(() => 
-  loadModuleWithRetry(() => import('@/pages/MySubscriptionPage'), 'MySubscriptionPage')
-);
-
-// Loading component for Suspense
+// Simple loading component
 const LoadingPage = () => (
   <div className="flex h-screen w-full items-center justify-center">
     <Spinner size="lg" />
   </div>
 );
 
-// Error fallback component
+// Simple error fallback component
 const ErrorFallback = () => (
   <div className="flex h-screen w-full items-center justify-center">
     <div className="text-center space-y-4">
@@ -110,31 +63,20 @@ const ErrorFallback = () => (
 function App() {
   return (
     <ErrorBoundary fallback={<ErrorFallback />}>
-      <ReactReadyProvider>
-        <BrowserRouter>
-          <ThemeProvider>
-            <DirectionProvider dir="rtl">
-              <Suspense fallback={<LoadingPage />}>
-                <Routes>
-                  {/* Auth Error Route */}
-                  <Route path="/auth-error" element={<AuthLoadError />} />
-                  
-                  {/* Auth Provider wrapped routes */}
-                  <Route
-                    element={
-                      <ErrorBoundary fallback={<ErrorFallback />}>
-                        <AuthProvider>
-                          <StockDataProvider refreshInterval={30000}>
-                            <Outlet />
-                          </StockDataProvider>
-                        </AuthProvider>
-                      </ErrorBoundary>
-                    }
-                  >
-                    {/* Public routes - eagerly loaded */}
+      <BrowserRouter>
+        <ThemeProvider>
+          <DirectionProvider dir="rtl">
+            <AuthProvider>
+              <StockDataProvider refreshInterval={30000}>
+                <Suspense fallback={<LoadingPage />}>
+                  <Routes>
+                    {/* Auth Error Route */}
+                    <Route path="/auth-error" element={<AuthLoadError />} />
+                    
+                    {/* Public routes */}
                     <Route path="/auth" element={<Auth />} />
                     
-                    {/* Payment routes - eagerly loaded */}
+                    {/* Payment routes */}
                     <Route path="/payment/redirect" element={<IframeRedirect />} />
                     <Route path="/payment/success" element={<PaymentSuccess />} />
                     <Route path="/payment/failed" element={<PaymentFailed />} />
@@ -163,14 +105,14 @@ function App() {
                     {/* Default & catch-all routes */}
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-              <Toaster richColors position="top-center" dir="rtl" />
-            </DirectionProvider>
-          </ThemeProvider>
-        </BrowserRouter>
-      </ReactReadyProvider>
+                  </Routes>
+                </Suspense>
+                <Toaster richColors position="top-center" dir="rtl" />
+              </StockDataProvider>
+            </AuthProvider>
+          </DirectionProvider>
+        </ThemeProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

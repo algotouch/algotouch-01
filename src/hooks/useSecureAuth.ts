@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase-client';
-import { Session, User, AuthError } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 
 export function useSecureAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -11,7 +11,6 @@ export function useSecureAuth() {
   const [error, setError] = useState<Error | null>(null);
   const isAuthenticated = !!session && !!user;
 
-  // Initialize auth state
   useEffect(() => {
     let mounted = true;
     let authSubscription: any = null;
@@ -20,7 +19,6 @@ export function useSecureAuth() {
       try {
         console.log('Initializing auth...');
         
-        // Set up auth subscription first
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, currentSession) => {
             console.log('Auth state changed:', event, !!currentSession);
@@ -36,7 +34,6 @@ export function useSecureAuth() {
         
         authSubscription = subscription;
 
-        // Then check current session
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError && mounted) {
           console.error('Session error:', sessionError);
@@ -62,7 +59,6 @@ export function useSecureAuth() {
 
     initializeAuth();
 
-    // Cleanup function
     return () => {
       mounted = false;
       if (authSubscription) {
@@ -71,7 +67,6 @@ export function useSecureAuth() {
     };
   }, []);
 
-  // Authentication methods
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);

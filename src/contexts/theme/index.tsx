@@ -2,8 +2,7 @@
 import React from 'react';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-// Simplified theme provider - no mounting check needed
-const ThemeProviderWrapper = ({ children }: { children: React.ReactNode }) => {
+const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <NextThemesProvider 
       attribute="class" 
@@ -16,8 +15,5 @@ const ThemeProviderWrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Export the wrapper as ThemeProvider
-export const ThemeProvider = ThemeProviderWrapper;
-
-// Re-export the hook with error handling
-export { useTheme } from '@/hooks/use-theme';
+export { ThemeProvider };
+export { useTheme } from 'next-themes';

@@ -1,24 +1,19 @@
 
-/**
- * Main entry point for the application
- */
-
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { StrictMode } from 'react';
+import App from './App';
 import './index.css';
-import { initializeApp } from './lib/appInit';
-import { initializeServiceWorker } from './lib/serviceWorkerInit';
 
-// Cache buster timestamp for all dynamic imports
-window.__VITE_TIMESTAMP__ = Date.now();
-
-// Initialize the service worker
-initializeServiceWorker();
-
-// Initialize the React application immediately - no DOM waiting
-initializeApp();
-
-// Add TypeScript declaration for window object
-declare global {
-  interface Window {
-    __VITE_TIMESTAMP__: number;
-  }
+// Simple initialization without complex service worker setup
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Root element not found");
 }
+
+const root = createRoot(rootElement);
+root.render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);

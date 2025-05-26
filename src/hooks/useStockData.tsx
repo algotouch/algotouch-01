@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { fetchStockIndices } from '@/lib/api/stockService';
 
@@ -11,7 +11,6 @@ type StockData = {
   isPositive: boolean;
 };
 
-// Create a custom hook for stock data with refresh functionality
 export function useStockDataWithRefresh(refreshInterval = 15000) {
   const [stockData, setStockData] = useState<StockData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -51,13 +50,10 @@ export function useStockDataWithRefresh(refreshInterval = 15000) {
       }
     };
 
-    // Initial fetch
     fetchData();
 
-    // Set up interval for refreshing data
     const intervalId = setInterval(fetchData, refreshInterval);
 
-    // Clean up interval on component unmount
     return () => {
       isMounted = false;
       clearInterval(intervalId);
