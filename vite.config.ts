@@ -21,17 +21,21 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Ensure single React instance
+      // Ensure single React instance - critical for preventing useRef/useContext errors
       "react": path.resolve(__dirname, "./node_modules/react"),
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
       "react-router-dom": path.resolve(__dirname, "./node_modules/react-router-dom")
     },
+    // Force resolution to exact paths to prevent duplicate React
+    dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
     // Force bundling of React dependencies to prevent conflicts
     include: ['react', 'react-dom', 'react-router-dom'],
     // Exclude problematic dependencies that might cause React conflicts
-    exclude: []
+    exclude: [],
+    // Force re-optimization of React dependencies
+    force: mode === 'development'
   },
   build: {
     // Force inline critical modules
@@ -63,5 +67,11 @@ export default defineConfig(({ mode }) => ({
     commonjsOptions: {
       include: [/react/, /react-dom/, /node_modules/]
     }
+  },
+  // Additional dev server options to prevent caching issues
+  esbuild: {
+    // Ensure consistent JSX handling
+    jsx: 'automatic',
+    jsxDev: mode === 'development'
   }
 }));
