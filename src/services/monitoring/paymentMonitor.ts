@@ -20,6 +20,6 @@ export class PaymentMonitor {
   }
 
   static logVerificationFailure(identifier: string, source: string, error: any, registrationId?: string) {
-    console.error(`[PaymentMonitor] Verification failure - ${identifier} from ${source}`, { error, registrationId });
+    console.error("[PaymentMonitor] Verification failure - %s from %s", identifier, source, { error, registrationId });
   }
 }
