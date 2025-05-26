@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import * as React from 'react';
 import { useStockDataWithRefresh } from '@/hooks/useStockData';
 import type { StockData } from '@/lib/api/stocks';
 
@@ -9,7 +9,7 @@ interface StockDataContextType {
   lastUpdated: Date | null;
 }
 
-const StockDataContext = createContext<StockDataContextType | undefined>(undefined);
+const StockDataContext = React.createContext<StockDataContextType | undefined>(undefined);
 
 export const StockDataProvider: React.FC<{ children: React.ReactNode; refreshInterval?: number }> = ({ 
   children, 
@@ -25,7 +25,7 @@ export const StockDataProvider: React.FC<{ children: React.ReactNode; refreshInt
 };
 
 export const useStockData = (): StockDataContextType => {
-  const context = useContext(StockDataContext);
+  const context = React.useContext(StockDataContext);
   
   if (context === undefined) {
     throw new Error('useStockData must be used within a StockDataProvider');
