@@ -98,8 +98,9 @@ export function setupDirectFailsafe(): void {
       console.error('Module loading error detected:', event.message);
       
       // Clear cache by appending a timestamp to requested URLs
-      window.__VITE_TIMESTAMP__ = createTimestamp();
-      console.log('Setting cache buster timestamp:', window.__VITE_TIMESTAMP__);
+      const timestamp = createTimestamp();
+      (window as any).__VITE_TIMESTAMP__ = timestamp;
+      console.log('Setting cache buster timestamp:', timestamp);
       
       // Extract module URL to detect which module failed
       const moduleUrl = event.message.match(/https?:\/\/[^'\s]+\.js/)?.[0] || '';
@@ -112,7 +113,7 @@ export function setupDirectFailsafe(): void {
       if (isDashboardModule || isAuthModule) {
         console.log('Critical module failed to load, redirecting to home page...');
         setTimeout(() => {
-          window.location.href = `./?t=${window.__VITE_TIMESTAMP__}`;
+          window.location.href = `./?t=${timestamp}`;
         }, 1000);
       }
       else {
@@ -120,7 +121,7 @@ export function setupDirectFailsafe(): void {
         setTimeout(() => {
           // Use relative paths consistently
           const path = window.location.pathname === '/' ? './' : '.' + window.location.pathname;
-          window.location.href = `${path}?t=${window.__VITE_TIMESTAMP__}`;
+          window.location.href = `${path}?t=${timestamp}`;
         }, 1000);
       }
     }
@@ -171,11 +172,13 @@ export function prefetchCriticalModules(): void {
       './assets/ui-components.js'
     ];
     
+    const timestamp = (window as any).__VITE_TIMESTAMP__;
+    
     criticalModules.forEach(module => {
       const link = document.createElement('link');
       link.rel = 'prefetch';
       link.as = 'script';
-      link.href = module + (window.__VITE_TIMESTAMP__ ? `?v=${window.__VITE_TIMESTAMP__}` : ''); // Add cache buster
+      link.href = module + (timestamp ? `?v=${timestamp}` : '');
       document.head.appendChild(link);
     });
     

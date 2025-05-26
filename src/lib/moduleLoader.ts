@@ -33,7 +33,7 @@ export const loadModuleWithRetry = async <T>(
       
       // Add version parameter to bust cache
       if (typeof window !== 'undefined') {
-        window.__VITE_TIMESTAMP__ = Date.now();
+        (window as any).__VITE_TIMESTAMP__ = Date.now();
       }
       
       // Retry the import
