@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface StockData {
   symbol: string;
@@ -32,13 +31,20 @@ const MOCK_STOCKS: StockData[] = [
   }
 ];
 
-export const useStockDataWithRefresh = (refreshInterval: number = 30000) => {
-  const [stockData, setStockData] = useState<StockData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout>();
+export interface StockDataState {
+  stockData: StockData[];
+  isLoading: boolean;
+  error: string | null;
+  refreshData: () => void;
+}
 
-  const fetchStockData = async () => {
+export const useStockDataWithRefresh = (refreshInterval: number = 30000): StockDataState => {
+  const [stockData, setStockData] = useState<StockData[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | undefined>();
+
+  const fetchStockData = useCallback(async () => {
     try {
       setError(null);
       // Simulate API call with mock data
@@ -58,7 +64,7 @@ export const useStockDataWithRefresh = (refreshInterval: number = 30000) => {
       setError('Failed to fetch stock data');
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStockData();
@@ -72,12 +78,12 @@ export const useStockDataWithRefresh = (refreshInterval: number = 30000) => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [refreshInterval]);
+  }, [refreshInterval, fetchStockData]);
 
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     setIsLoading(true);
     fetchStockData();
-  };
+  }, [fetchStockData]);
 
   return {
     stockData,

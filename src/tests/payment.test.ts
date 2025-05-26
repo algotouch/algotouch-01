@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+/*  */import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PaymentMonitor } from '@/services/monitoring/paymentMonitor';
 import { cardcomConfig, isTestEnvironment } from '@/config/cardcom';
 import { supabase } from '@/lib/supabase';
