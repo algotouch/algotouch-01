@@ -1,83 +1,61 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from '../auth';
-import { getUserReputation } from '@/lib/community/reputation-service';
-import { useReputationActions } from './useReputationActions';
-import { useStreakActions } from './useStreakActions';
-import { UserStreak } from '@/lib/community/types';
+import { supabase } from '@/lib/supabase-client';
+import { useAuth } from '../auth/AuthContext';
 
-// Define the context type
 interface ReputationContextType {
-  userPoints: number;
-  userLevel: number;
-  userStreak: UserStreak | null;
-  checkAndAwardDailyLogin: () => Promise<void>;
-  refreshData: {
-    fetchUserReputation: () => Promise<void> | void;
-    updateUserStreak: () => Promise<void>;
-  }
+  userReputation: number;
+  loading: boolean;
+  error: string | null;
+  fetchUserReputation: () => Promise<void>;
 }
 
-// Create the context with default values
-const ReputationContext = createContext<ReputationContextType>({
-  userPoints: 0,
-  userLevel: 1,
-  userStreak: null,
-  checkAndAwardDailyLogin: async () => {},
-  refreshData: {
-    fetchUserReputation: () => {},
-    updateUserStreak: async () => {}
-  }
-});
+const ReputationContext = createContext<ReputationContextType | undefined>(undefined);
 
 export const ReputationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
-  
-  // Use the existing reputation and streak action hooks
-  const { 
-    userPoints, 
-    userLevel, 
-    checkAndAwardDailyLogin,
-    updateReputationData
-  } = useReputationActions(user?.id);
-  
-  const {
-    userStreak,
-    updateUserStreak
-  } = useStreakActions(user?.id);
-  
-  // Fetch user reputation when authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      updateReputationData().catch(err => 
-        console.error('Error fetching user reputation:', err));
-      updateUserStreak().catch(err => 
-        console.error('Error updating user streak:', err));
-    }
-  }, [isAuthenticated, user]);
-  
-  // Check for daily login once when component mounts
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      checkAndAwardDailyLogin().catch(err =>
-        console.error('Error checking daily login:', err));
-    }
-  }, [isAuthenticated, user]);
-  
-  // Provide context value
-  const value: ReputationContextType = {
-    userPoints,
-    userLevel,
-    userStreak,
-    checkAndAwardDailyLogin,
-    refreshData: {
-      fetchUserReputation: () => user && updateReputationData(),
-      updateUserStreak: async () => {
-        if (user) await updateUserStreak();
+  const [userReputation, setUserReputation] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  const fetchUserReputation = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('user_reputation')
+        .select('reputation')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        setError(error.message);
+      } else if (data) {
+        setUserReputation(data.reputation);
+      } else {
+        // If no data, assume reputation is 0
+        setUserReputation(0);
       }
+    } catch (err) {
+      setError('Failed to fetch user reputation.');
+    } finally {
+      setLoading(false);
     }
   };
-  
+
+  useEffect(() => {
+    fetchUserReputation();
+  }, [user]);
+
+  const value: ReputationContextType = {
+    userReputation,
+    loading,
+    error,
+    fetchUserReputation,
+  };
+
   return (
     <ReputationContext.Provider value={value}>
       {children}
@@ -85,12 +63,10 @@ export const ReputationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 };
 
-export const useReputation = () => {
+export const useReputation = (): ReputationContextType => {
   const context = useContext(ReputationContext);
-  
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useReputation must be used within a ReputationProvider');
   }
-  
   return context;
 };

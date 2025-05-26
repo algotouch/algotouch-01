@@ -1,50 +1,41 @@
-
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import SubscriptionCard from '@/components/subscription/SubscriptionCard';
-import { useAuth } from '@/contexts/auth';
-import SubscriptionManager from '@/components/payment/SubscriptionManager';
+import { Badge } from '@/components/ui/badge';
+import { CreditCard, ArrowRight } from 'lucide-react';
+import { useAuth } from '@/contexts/auth/AuthContext';
 
-const NoSubscriptionState = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+interface NoSubscriptionStateProps {
+  onSubscribe: () => void;
+}
 
+const NoSubscriptionState: React.FC<NoSubscriptionStateProps> = ({ onSubscribe }) => {
+  const { registrationData } = useAuth();
+  
   return (
-    <SubscriptionCard 
-      title="אין לך מנוי פעיל" 
-      description="הרשם עכשיו כדי לקבל גישה מלאה למערכת"
-    >
-      <div className="text-center py-6 space-y-4">
-        <p className="text-muted-foreground pb-2">על מנת להשתמש במערכת, עליך לרכוש מנוי</p>
-        
-        <Button 
-          onClick={() => navigate('/subscription')}
-          size="lg"
-          className="mx-auto"
-        >
-          בחר תכנית מנוי
-        </Button>
-        
-        {user?.email && (
-          <div className="pt-6 border-t mt-6">
-            <SubscriptionManager 
-              userId={user.id} 
-              email={user.email}
-              showRepairSuggestion={true}
-            />
-          </div>
-        )}
-        
-        {!user?.email && (
-          <div className="pt-6 border-t mt-6 text-sm text-muted-foreground">
-            <p>אם אתה רואה את זה, נסה להתחבר מחדש</p>
-            <p className="mt-1">אם אתה חושב שיש לך כבר מנוי, פנה לתמיכה</p>
-          </div>
-        )}
-      </div>
-    </SubscriptionCard>
+    <Card className="glass-card-2025">
+      <CardHeader>
+        <CardTitle>אין לך מנוי פעיל</CardTitle>
+        <CardDescription>
+          הירשם עכשיו כדי לקבל גישה מלאה לכל הפיצ'רים
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center space-x-2 rtl:space-x-reverse">
+          <Badge variant="secondary">גישה מוגבלת</Badge>
+          <CreditCard className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          כדי לקבל גישה מלאה לכל הכלים והתכנים שלנו, אנא בחר תוכנית מנוי.
+        </p>
+      </CardContent>
+      <Button onClick={onSubscribe} className="w-full justify-start gap-2">
+        {registrationData ? 'המשך לבחירת תוכנית' : 'בחר תוכנית מנוי'}
+        <ArrowRight className="h-4 w-4" />
+      </Button>
+    </Card>
   );
 };
 
 export default NoSubscriptionState;
+

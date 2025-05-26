@@ -1,8 +1,7 @@
-
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/auth';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { TokenData } from '@/types/payment';
 import { getSubscriptionPlans } from '../utils/paymentHelpers';
 import { useRegistrationData } from './useRegistrationData';
@@ -56,7 +55,7 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
     checkRecovery();
   }, []);
 
-  const handlePaymentProcessing = async (tokenData: TokenData) => {
+  const handlePaymentProcessing = useCallback(async (tokenData: TokenData) => {
     let operationTypeValue = 3;
     
     if (planId === 'annual') {
@@ -127,9 +126,9 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [handleError, user, registrationData, planId, planDetails, onPaymentComplete]);
 
-  const handleSubmit = async (e: React.FormEvent, cardData: {
+  const handleSubmit = useCallback(async (e: React.FormEvent, cardData: {
     cardNumber: string;
     cardholderName: string;
     expiryDate: string;
@@ -161,9 +160,9 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [handlePaymentProcessing]);
 
-  const handleExternalPayment = async () => {
+  const handleExternalPayment = useCallback(async () => {
     let operationTypeValue = 3;
     
     if (planId === 'annual') {
@@ -193,7 +192,7 @@ export const usePaymentProcess = ({ planId, onPaymentComplete }: UsePaymentProce
       
       setIsProcessing(false);
     }
-  };
+  }, [handleError, user, registrationData, planId]);
 
   return {
     isProcessing,

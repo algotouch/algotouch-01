@@ -1,258 +1,191 @@
-
-import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { CreditCard, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
-import PaymentDetails from './PaymentDetails';
-import PlanSummary from './PlanSummary';
-import SecurityNote from './SecurityNote';
-import { getSubscriptionPlans } from './utils/paymentHelpers';
-import { createTokenData } from './utils/paymentHelpers';
-import { registerUser } from '@/services/registration/registerUser';
-import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
+import { CreditCard, Lock, Shield } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { usePaymentProcess } from './hooks/usePaymentProcess';
+import { usePaymentErrorHandling } from './hooks/usePaymentErrorHandling';
+import { useUnifiedRegistrationData } from '@/hooks/useUnifiedRegistrationData';
 
 interface PaymentFormProps {
   planId: string;
-  onPaymentComplete: () => void;
+  amount: number;
+  currency: string;
+  onSuccess: (paymentDetails: any) => void;
+  onCancel: () => void;
+  onError: (error: Error) => void;
 }
 
-const PaymentForm: React.FC<PaymentFormProps> = ({ planId, onPaymentComplete }) => {
-  const navigate = useNavigate();
+const PaymentForm: React.FC<PaymentFormProps> = ({ planId, amount, currency, onSuccess, onCancel, onError }) => {
   const [cardNumber, setCardNumber] = useState('');
-  const [cardholderName, setCardholderName] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [registrationId, setRegistrationId] = useState<string | null>(null);
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+  const [cardHolderName, setCardHolderName] = useState('');
+  const [saveCard, setSaveCard] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   
-  const {
-    registrationData,
-    registrationError,
-    updateRegistrationData,
-    clearRegistrationData,
-    isLoading,
-    saveRegistrationStep,
-    getRegistrationProgress
-  } = useUnifiedRegistrationData();
-
-  const progress = getRegistrationProgress();
-
+  const { registrationData } = useUnifiedRegistrationData();
+  const { initializePayment, processPayment, paymentStatus, paymentError, clearPaymentError } = usePaymentProcess({
+    planId,
+    amount,
+    currency,
+    onSuccess,
+    onError
+  });
+  const { handlePaymentError } = usePaymentErrorHandling();
+  
+  const isPaymentInitialized = paymentStatus.initialized;
+  const isProcessingPayment = paymentStatus.processing;
+  
+  // Initialize payment when the component mounts
   useEffect(() => {
-    if (isLoading) return;
+    setIsMounted(true);
+    initializePayment();
     
-    if (!registrationData) {
-      toast.error('נתוני הרשמה חסרים, אנא חזור לדף ההרשמה');
-      navigate('/auth?tab=signup');
-      return;
+    return () => {
+      setIsMounted(false);
+    };
+  }, [initializePayment]);
+  
+  // Handle payment errors
+  useEffect(() => {
+    if (paymentError) {
+      handlePaymentError(paymentError);
+      clearPaymentError();
     }
-    
-    // Auto-fill cardholder name from registration data
-    if (registrationData.userData?.firstName && registrationData.userData?.lastName && !cardholderName) {
-      setCardholderName(`${registrationData.userData.firstName} ${registrationData.userData.lastName}`);
-    }
-    
-    const storedRegId = localStorage.getItem('temp_registration_id');
-    if (storedRegId) {
-      setRegistrationId(storedRegId);
-    }
-  }, [registrationData, isLoading, cardholderName, navigate]);
-
-  const planDetails = getSubscriptionPlans();
-  const plan = planId === 'annual' 
-    ? planDetails.annual 
-    : planId === 'vip' 
-      ? planDetails.vip 
-      : planDetails.monthly;
+  }, [paymentError, handlePaymentError, clearPaymentError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPaymentError(null);
     
-    if (!cardNumber || !cardholderName || !expiryDate || !cvv) {
-      toast.error('נא למלא את כל פרטי התשלום');
+    if (!termsAccepted) {
+      toast.error('אנא אשר את תנאי השימוש');
       return;
     }
     
-    if (!registrationData) {
-      toast.error('נתוני ההרשמה חסרים, אנא התחל את תהליך ההרשמה מחדש');
+    if (!cardNumber || !cardExpiry || !cardCvc || !cardHolderName) {
+      toast.error('אנא מלא את כל פרטי התשלום');
       return;
     }
     
-    try {
-      setIsProcessing(true);
-      
-      const tokenData = createTokenData(cardNumber, expiryDate, cardholderName);
-      
-      // Save payment step
-      const stepResult = await saveRegistrationStep('payment', {
-        paymentToken: {
-          token: String(tokenData.token || `sim_${Date.now()}`),
-          last4Digits: tokenData.lastFourDigits,
-          expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
-          cardholderName: tokenData.cardholderName
-        },
-        planId
-      });
-
-      if (!stepResult.success) {
-        throw new Error('שגיאה בשמירת פרטי התשלום');
-      }
-      
-      // Update registration data with token information
-      updateRegistrationData({
-        paymentToken: {
-          token: String(tokenData.token || `sim_${Date.now()}`),
-          last4Digits: tokenData.lastFourDigits,
-          expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
-          cardholderName: tokenData.cardholderName
-        }
-      });
-      
-      const result = await registerUser({
-        registrationData: {
-          ...registrationData,
-          planId,
-          paymentToken: {
-            token: String(tokenData.token || `sim_${Date.now()}`),
-            last4Digits: tokenData.lastFourDigits,
-            expiry: `${tokenData.expiryMonth}/${tokenData.expiryYear}`,
-            cardholderName: tokenData.cardholderName
-          }
-        },
-        tokenData
-      });
-      
-      if (!result.success) {
-        throw result.error;
-      }
-      
-      if (result.registrationId) {
-        localStorage.setItem('temp_registration_id', result.registrationId);
-        setRegistrationId(result.registrationId);
-      }
-      
-      // Save completion step
-      await saveRegistrationStep('completed', { 
-        registrationCompleted: true,
-        completedAt: new Date().toISOString()
-      });
-      
-      toast.success('התשלום נקלט בהצלחה! נרשמת לתקופת ניסיון חינם');
-      
-      clearRegistrationData();
-      
-      onPaymentComplete();
-    } catch (error: any) {
-      console.error('Payment/registration error:', error);
-      setPaymentError(error.message || 'אירעה שגיאה בתהליך ההרשמה. נסה שנית מאוחר יותר.');
-      toast.error(error.message || 'אירעה שגיאה בתהליך ההרשמה. נסה שנית מאוחר יותר.');
-    } finally {
-      setIsProcessing(false);
-    }
+    const paymentData = {
+      paymentMethod,
+      cardNumber,
+      cardExpiry,
+      cardCvc,
+      cardHolderName,
+      saveCard,
+      termsAccepted,
+      email: registrationData?.email,
+      firstName: registrationData?.userData?.firstName,
+      lastName: registrationData?.userData?.lastName,
+      phone: registrationData?.userData?.phone
+    };
+    
+    processPayment(paymentData);
   };
 
-  if (registrationError) {
-    return (
-      <Card className="max-w-lg mx-auto">
-        <CardHeader>
-          <CardTitle className="text-center">שגיאה בתהליך ההרשמה</CardTitle>
-          <CardDescription className="text-center">לא ניתן להמשיך את תהליך ההרשמה</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+  return (
+    <Card className="glass-card-2025">
+      <CardHeader>
+        <CardTitle>פרטי תשלום</CardTitle>
+        <CardDescription>הזן את פרטי התשלום שלך</CardDescription>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        {paymentStatus.initializationError && (
           <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {registrationError}
+              {paymentStatus.initializationError.message || 'אירעה שגיאה בהכנת התשלום. אנא נסה שוב מאוחר יותר.'}
             </AlertDescription>
           </Alert>
-          <p className="text-center">
-            אנא נסה להתחיל את תהליך ההרשמה מחדש
-          </p>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <Button onClick={() => navigate('/auth?tab=signup')}>
-            חזרה לעמוד ההרשמה
-          </Button>
-        </CardFooter>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="max-w-lg mx-auto" dir="rtl">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CreditCard className="h-5 w-5 text-primary" />
-          <CardTitle>פרטי תשלום</CardTitle>
-        </div>
-        <CardDescription>הזן את פרטי כרטיס האשראי שלך לתשלום</CardDescription>
+        )}
         
-        {/* Progress indicator */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <span>שלב {progress.currentStepIndex + 1} מתוך {progress.totalSteps}</span>
+        {!isPaymentInitialized && !paymentStatus.initializationError && (
+          <div className="flex items-center justify-center">
+            <Spinner size="lg" />
           </div>
-          <div className="w-full bg-secondary h-2 rounded-full">
-            <div 
-              className="bg-primary h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress.progressPercentage}%` }}
-            />
-          </div>
-        </div>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          {paymentError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{paymentError}</AlertDescription>
-            </Alert>
-          )}
-          
-          {registrationId && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-200 dark:border-blue-800 text-sm">
-              <p className="font-medium">מזהה רישום זמני: {registrationId}</p>
-              <p className="text-xs text-muted-foreground">שמור מזהה זה במקרה של בעיות בתהליך ההרשמה</p>
+        )}
+        
+        {isPaymentInitialized && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="cardHolderName">שם בעל הכרטיס</Label>
+              <Input 
+                type="text" 
+                id="cardHolderName" 
+                placeholder="השם שלך כפי שמופיע בכרטיס" 
+                value={cardHolderName}
+                onChange={(e) => setCardHolderName(e.target.value)}
+                required
+              />
             </div>
-          )}
-          
-          <PlanSummary 
-            planName={plan.name} 
-            price={plan.price} 
-            description={plan.description} 
-            currency={plan.currency}
-          />
-          
-          <Separator />
-          
-          <PaymentDetails 
-            cardNumber={cardNumber}
-            setCardNumber={setCardNumber}
-            cardholderName={cardholderName}
-            setCardholderName={setCardholderName}
-            expiryDate={expiryDate}
-            setExpiryDate={setExpiryDate}
-            cvv={cvv}
-            setCvv={setCvv}
-          />
-          
-          <SecurityNote />
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
-          <Button type="submit" className="w-full" disabled={isProcessing}>
-            {isProcessing ? 'מעבד תשלום והרשמה...' : 'סיים הרשמה לתקופת ניסיון חינם'}
-          </Button>
-          <p className="text-xs text-center text-muted-foreground max-w-md mx-auto">
-            לחיצה על כפתור זה מאשרת את פרטי התשלום לחיוב אוטומטי לאחר תקופת הניסיון
-          </p>
-        </CardFooter>
-      </form>
+            
+            <div className="space-y-2">
+              <Label htmlFor="cardNumber">מספר כרטיס האשראי</Label>
+              <Input 
+                type="text" 
+                id="cardNumber" 
+                placeholder="**** **** **** ****" 
+                value={cardNumber}
+                onChange={(e) => setCardNumber(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="cardExpiry">תוקף</Label>
+                <Input 
+                  type="text" 
+                  id="cardExpiry" 
+                  placeholder="MM/YY" 
+                  value={cardExpiry}
+                  onChange={(e) => setCardExpiry(e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cardCvc">CVC</Label>
+                <Input 
+                  type="text" 
+                  id="cardCvc" 
+                  placeholder="***" 
+                  value={cardCvc}
+                  onChange={(e) => setCardCvc(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="terms" 
+                checked={termsAccepted}
+                onCheckedChange={(checked) => setTermsAccepted(checked || false)}
+              />
+              <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed">
+                אני מאשר את <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">תנאי השימוש</a>
+              </Label>
+            </div>
+            
+            <Button type="submit" className="w-full" disabled={isProcessingPayment}>
+              {isProcessingPayment ? 'מעבד תשלום...' : 'שלם עכשיו'}
+            </Button>
+          </form>
+        )}
+      </CardContent>
     </Card>
   );
 };

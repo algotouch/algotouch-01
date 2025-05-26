@@ -1,136 +1,162 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
-import Courses from '@/components/Courses';
-import { Card, CardContent } from '@/components/ui/card';
-import { ArrowUpRight, ArrowDownRight, TrendingUp, RefreshCw, Clock, BookOpen, Newspaper } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
-import { format } from 'date-fns';
-import BlogSection from '@/components/BlogSection';
-import { useStockData } from '@/contexts/stock/StockDataContext';
-import ErrorBoundary from '@/components/ErrorBoundary';
+import { TrendingUp, TrendingDown, DollarSign, BarChart3, Users, Calendar, BookOpen, MessageSquare } from 'lucide-react';
+import { useStockData } from '@/contexts/stock/StockDataProvider';
+import { useAuth } from '@/contexts/auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
-const StockIndicesSection = () => {
-  const { stockData, loading, error, lastUpdated } = useStockData();
-  
-  // Format last updated time
-  const formattedStocksLastUpdated = lastUpdated 
-    ? format(lastUpdated, 'HH:mm:ss')
-    : 'לא ידוע';
-    
-  return (
-    <div className="mb-8">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <TrendingUp size={18} className="text-primary" />
-          <span>מדדים בזמן אמת</span>
-        </h2>
-        <div className="flex items-center text-sm text-muted-foreground">
-          <Clock size={14} className="mr-1" />
-          <span>עודכן לאחרונה: {formattedStocksLastUpdated}</span>
-        </div>
-      </div>
-      
-      {loading && stockData.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <Card key={i} className="hover-scale">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center animate-pulse">
-                  <div className="w-20 h-6 bg-muted rounded"></div>
-                  <div className="w-16 h-6 bg-muted rounded"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : error ? (
-        <Card className="p-4 border-red-300 bg-red-50 dark:bg-red-900/10">
-          <p className="text-red-600 dark:text-red-400">שגיאה בטעינת נתוני המדדים. נסה לרענן את הדף.</p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stockData.map((index) => (
-            <Card key={index.symbol} className="hover-scale">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-bold text-foreground">{index.symbol}</h3>
-                    <p className="text-2xl font-medium mt-1">{index.price}</p>
-                  </div>
-                  <div className={`flex items-center text-lg ${index.isPositive ? 'text-tradervue-green' : 'text-tradervue-red'}`}>
-                    {index.isPositive ? 
-                      <ArrowUpRight className="mr-1" size={20} /> : 
-                      <ArrowDownRight className="mr-1" size={20} />
-                    }
-                    <span>{index.changePercent} ({index.change})</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Dashboard component
 const Dashboard = () => {
-  const { toast } = useToast();
+  const { stockData, loading, error, lastUpdated } = useStockData();
+  const { user, session, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [isAuthenticated, navigate]);
 
-  const handleManualRefresh = () => {
-    window.location.reload();
-    toast({
-      title: "מרענן נתונים",
-      description: "הנתונים מתעדכנים...",
-      duration: 2000,
-    });
-  };
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <Layout>
-      <div className="tradervue-container py-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold mb-8 flex items-center">
-            <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">לוח בקרה</span>
-          </h1>
-          <Button 
-            onClick={handleManualRefresh} 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center gap-2 mb-8"
-          >
-            <RefreshCw size={14} className="mr-1" />
-            <span>רענן נתונים</span>
-          </Button>
-        </div>
-        
-        {/* Stock Indices Section - First for greater prominence */}
-        <ErrorBoundary fallback={<div>שגיאה בטעינת נתוני מדד. אנא נסה לרענן את הדף.</div>}>
-          <StockIndicesSection />
-        </ErrorBoundary>
-        
-        {/* Blog Section */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Newspaper size={18} className="text-primary" />
-              <span>פוסטים אחרונים</span>
-            </h2>
-          </div>
-          <BlogSection />
-        </div>
-        
-        {/* Courses Section - Last */}
-        <div>
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <BookOpen size={20} className="text-primary" />
-            <span>קורסים דיגיטליים</span>
-          </h2>
-          <Courses />
-        </div>
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>מדד הדגל</CardTitle>
+            <CardDescription>S&P 500</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">5,246.67</div>
+            <div className="flex items-center space-x-1 text-sm text-green-500 dark:text-green-400">
+              <TrendingUp className="h-4 w-4" />
+              <span>+0.8%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>הייטק</CardTitle>
+            <CardDescription>Nasdaq</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">16,742.39</div>
+            <div className="flex items-center space-x-1 text-sm text-green-500 dark:text-green-400">
+              <TrendingUp className="h-4 w-4" />
+              <span>+1.2%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>תעשייה כבדה</CardTitle>
+            <CardDescription>Dow Jones</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">38,836.50</div>
+            <div className="flex items-center space-x-1 text-sm text-red-500 dark:text-red-400">
+              <TrendingDown className="h-4 w-4" />
+              <span>-0.3%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>הבורסה המקומית</CardTitle>
+            <CardDescription>Tel Aviv 35</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">1,995.38</div>
+            <div className="flex items-center space-x-1 text-sm text-green-500 dark:text-green-400">
+              <TrendingUp className="h-4 w-4" />
+              <span>+0.5%</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>ביצועי תיק השקעות</CardTitle>
+            <CardDescription>סקירה כללית של ביצועי התיק שלך</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">12.5%</div>
+            <div className="text-sm text-muted-foreground">בהשוואה לתקופה המקבילה אשתקד</div>
+            <BarChart3 className="h-8 w-8 text-primary mt-4" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>פוזיציות פתוחות</CardTitle>
+            <CardDescription>מספר הפוזיציות הפתוחות כרגע</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">7</div>
+            <div className="text-sm text-muted-foreground">פוזיציות במניות, מט"ח וסחורות</div>
+            <DollarSign className="h-8 w-8 text-primary mt-4" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>חברים בקהילה</CardTitle>
+            <CardDescription>מספר החברים הפעילים בקהילה</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">4,528</div>
+            <div className="text-sm text-muted-foreground">משתמשים רשומים ופעילים</div>
+            <Users className="h-8 w-8 text-primary mt-4" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>עדכונים וחדשות</CardTitle>
+            <CardDescription>התראות ועדכונים חשובים</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <a href="/blog/123" className="text-primary hover:underline">סקירת שוק שבועית - מניות הטכנולוגיה</a>
+                <div className="text-sm text-muted-foreground">פורסם לפני 3 שעות</div>
+              </li>
+              <li>
+                <a href="/courses/456" className="text-primary hover:underline">קורס חדש: ניתוח טכני מתקדם</a>
+                <div className="text-sm text-muted-foreground">הושק היום</div>
+              </li>
+              <li>
+                <a href="/community" className="text-primary hover:underline">דיון חם בקהילה: השפעת האינפלציה על השוק</a>
+                <div className="text-sm text-muted-foreground">פעיל במיוחד</div>
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>קישורים מהירים</CardTitle>
+            <CardDescription>גישה מהירה לפעולות נפוצות</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4">
+            <Button variant="outline" className="justify-start"><Calendar className="h-4 w-4 mr-2" /> לוח שנה</Button>
+            <Button variant="outline" className="justify-start"><BookOpen className="h-4 w-4 mr-2" /> קורסים</Button>
+            <Button variant="outline" className="justify-start"><MessageSquare className="h-4 w-4 mr-2" /> קהילה</Button>
+            <Button variant="outline" className="justify-start"><TrendingUp className="h-4 w-4 mr-2" /> גרפים</Button>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );

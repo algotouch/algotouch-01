@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/auth';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/auth/AuthContext';
 import { useCommunity } from '@/contexts/community/CommunityContext';
 import { Comment } from '@/lib/community/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

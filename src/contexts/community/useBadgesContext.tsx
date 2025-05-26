@@ -1,75 +1,102 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from '../auth';
-import { Badge, UserBadge } from '@/lib/community/types';
-import { getUserBadges, getAllBadges } from '@/lib/community/badges-service';
+import { supabase } from '@/lib/supabase-client';
+import { useAuth } from '@/contexts/auth/AuthContext';
 
-// Define the context type
 interface BadgesContextType {
-  userBadges: UserBadge[];
-  allBadges: Badge[];
-  refreshData: {
-    fetchUserBadges: () => Promise<void> | void;
-    fetchAllBadges: () => Promise<void>;
-  }
+  badges: any[];
+  loading: boolean;
+  error: string | null;
+  fetchBadges: () => Promise<void>;
+  assignBadge: (userId: string, badgeId: number) => Promise<void>;
+  revokeBadge: (userId: string, badgeId: number) => Promise<void>;
 }
 
-// Create the context with default values
-const BadgesContext = createContext<BadgesContextType>({
-  userBadges: [],
-  allBadges: [],
-  refreshData: {
-    fetchUserBadges: () => {},
-    fetchAllBadges: async () => {}
-  }
-});
+const BadgesContext = createContext<BadgesContextType | undefined>(undefined);
 
 export const BadgesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
-  
-  const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
-  const [allBadges, setAllBadges] = useState<Badge[]>([]);
-  
-  // Initialize on mount
-  useEffect(() => {
-    fetchAllBadges().catch(err => console.error('Error fetching badges:', err));
-  }, []);
-  
-  // Fetch current user's badges when authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchUserBadges(user.id).catch(err => console.error('Error fetching user badges:', err));
-    }
-  }, [isAuthenticated, user]);
-  
-  const fetchAllBadges = async () => {
+  const [badges, setBadges] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const { session } = useAuth();
+
+  const fetchBadges = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const badges = await getAllBadges();
-      setAllBadges(badges);
-    } catch (error) {
-      console.error('Error fetching all badges:', error);
+      const { data, error } = await supabase
+        .from('badges')
+        .select('*');
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setBadges(data || []);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch badges');
+    } finally {
+      setLoading(false);
     }
   };
-  
-  const fetchUserBadges = async (userId: string) => {
+
+  const assignBadge = async (userId: string, badgeId: number) => {
+    setLoading(true);
+    setError(null);
     try {
-      const fetchedBadges = await getUserBadges(userId);
-      setUserBadges(fetchedBadges);
-    } catch (error) {
-      console.error('Error fetching user badges:', error);
+      const { error } = await supabase
+        .from('user_badges')
+        .insert([{ user_id: userId, badge_id: badgeId }]);
+
+      if (error) {
+        setError(error.message);
+      } else {
+        // Refresh badges after assignment
+        await fetchBadges();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to assign badge');
+    } finally {
+      setLoading(false);
     }
   };
-  
-  // Provide context value
+
+  const revokeBadge = async (userId: string, badgeId: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase
+        .from('user_badges')
+        .delete()
+        .match({ user_id: userId, badge_id: badgeId });
+
+      if (error) {
+        setError(error.message);
+      } else {
+        // Refresh badges after revoke
+        await fetchBadges();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to revoke badge');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (session) {
+      fetchBadges();
+    }
+  }, [session]);
+
   const value: BadgesContextType = {
-    userBadges,
-    allBadges,
-    refreshData: {
-      fetchUserBadges: () => user && fetchUserBadges(user.id),
-      fetchAllBadges
-    }
+    badges,
+    loading,
+    error,
+    fetchBadges,
+    assignBadge,
+    revokeBadge
   };
-  
+
   return (
     <BadgesContext.Provider value={value}>
       {children}
@@ -77,12 +104,10 @@ export const BadgesProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 };
 
-export const useBadges = () => {
+export const useBadges = (): BadgesContextType => {
   const context = useContext(BadgesContext);
-  
   if (context === undefined) {
     throw new Error('useBadges must be used within a BadgesProvider');
   }
-  
   return context;
 };

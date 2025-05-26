@@ -1,163 +1,147 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase-client';
+import { useAuth } from '@/contexts/auth/AuthContext';
 
-import { useState } from 'react';
-import { useAuth } from '@/contexts/auth';
-import { useCommunity } from '@/contexts/community';
-import { getCourseData, Course, Lesson, Module } from '@/data/mockCourseData';
-import { useVideoProgress } from './useVideoProgress';
-
-interface UseCourseDataProps {
-  courseId?: string;
+interface Course {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  lessons: Lesson[];
 }
 
-export function useCourseData(courseId?: string) {
-  const { isAuthenticated, user } = useAuth();
-  const { 
-    courseProgress = [],
-    userBadges = [],
-    recordLessonWatched,
-    completeModule, 
-    completeCourse
-  } = useCommunity();
+interface Lesson {
+  id: string;
+  title: string;
+  content: string;
+  video_url: string;
+}
 
-  // UI State
-  const [activeTab, setActiveTab] = useState('content');
-  const [activeVideoId, setActiveVideoId] = useState<number | null>(1);
-  
-  // Get course data
-  const courseData = getCourseData(courseId);
+interface CourseProgress {
+  course_id: string;
+  user_id: string;
+  completed_lessons: string[];
+}
 
-  // Get active lesson and video info
-  const activeLesson = courseData.lessons.find(lesson => lesson.id === activeVideoId);
-  const videoUrl = activeLesson?.videoUrl || courseData.activeVideo?.url;
-  const videoTitle = activeLesson?.title || courseData.activeVideo?.title || '';
+export const useCourseData = (courseId: string | undefined) => {
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [progress, setProgress] = useState<CourseProgress | null>(null);
 
-  // Get user progress for this course
-  const userProgress = courseProgress.find(progress => progress.courseId === courseId);
-  
-  // Define a wrapper for recordLessonWatched that matches the expected signature
-  const handleRecordLessonWatched = async (courseId: string, lessonId: string): Promise<boolean> => {
-    if (recordLessonWatched) {
-      return await recordLessonWatched(courseId, lessonId);
+  useEffect(() => {
+    if (!courseId) {
+      setError('Course ID is required');
+      setLoading(false);
+      return;
     }
-    return false;
-  };
-  
-  // Handle video progress tracking
-  const { 
-    videoCompleted,
-    handleVideoProgress,
-    handleVideoEnded
-  } = useVideoProgress({
-    courseId: courseId || 'unknown',
-    lessonId: activeVideoId,
-    recordLessonWatched: handleRecordLessonWatched,
-    videoTitle
-  });
-  
-  // Calculate course progress percentage
-  const calculateProgress = () => {
-    if (!userProgress || courseData.lessons.length === 0) {
-      return courseData.progress;
-    }
-    
-    const watchedCount = userProgress.lessonsWatched.length;
-    return Math.round((watchedCount / courseData.lessons.length) * 100);
-  };
-  
-  const progressPercentage = calculateProgress();
 
-  // Find which module contains a lesson
-  const findModuleForLesson = (lessonId: number) => {
-    const lessonIndex = courseData.lessons.findIndex(lesson => lesson.id === lessonId);
-    if (lessonIndex === -1) return null;
-    
-    const moduleIndex = Math.floor(lessonIndex / (courseData.lessons.length / courseData.modules.length));
-    return courseData.modules[moduleIndex < courseData.modules.length ? moduleIndex : 0];
-  };
-  
-  // Check if all lessons in a module have been watched
-  const checkAllModuleLessonsWatched = (module: Module) => {
-    if (!userProgress) return false;
-    
-    const moduleIndex = courseData.modules.indexOf(module);
-    const lessonsPerModule = Math.ceil(courseData.lessons.length / courseData.modules.length);
-    const startIdx = moduleIndex * lessonsPerModule;
-    const endIdx = Math.min(startIdx + lessonsPerModule, courseData.lessons.length);
-    
-    const moduleLessons = courseData.lessons.slice(startIdx, endIdx);
-    
-    return moduleLessons.every(lesson => 
-      userProgress.lessonsWatched.includes(lesson.id.toString())
-    );
-  };
-  
-  // Check if all modules in course have been completed
-  const checkAllModulesCompleted = () => {
-    if (!userProgress) return false;
-    
-    return courseData.modules.every((_, index) => 
-      userProgress.modulesCompleted.includes(index.toString())
-    );
-  };
+    const fetchCourse = async () => {
+      setLoading(true);
+      try {
+        const { data: courseData, error: courseError } = await supabase
+          .from('courses')
+          .select(`
+            id,
+            title,
+            description,
+            image_url,
+            lessons (
+              id,
+              title,
+              content,
+              video_url
+            )
+          `)
+          .eq('id', courseId)
+          .single();
 
-  // Handle lesson click to update active video
-  const handleLessonClick = async (lessonId: number) => {
-    // Only update active video ID when clicking on a lesson
-    setActiveVideoId(lessonId);
-  };
-
-  // Check if user has badge for course completion
-  const hasCourseCompletionBadge = () => {
-    if (!courseId || !userBadges || userBadges.length === 0) {
-      return false;
-    }
-    
-    return userBadges.some(userBadge => 
-      userBadge.badge && userBadge.badge.name && userBadge.badge.name.includes(courseData.title.substring(0, 10))
-    );
-  };
-
-  // Analyze progress and check for module/course completion when video is completed
-  const checkCourseCompletion = async () => {
-    if (!isAuthenticated || !user || !activeVideoId) return;
-    
-    // Check if module is completed
-    const lessonModule = findModuleForLesson(activeVideoId);
-    if (lessonModule) {
-      const moduleId = courseData.modules.indexOf(lessonModule).toString();
-      const allModuleLessonsWatched = checkAllModuleLessonsWatched(lessonModule);
-      
-      if (allModuleLessonsWatched && completeModule) {
-        await completeModule(courseId || 'unknown', moduleId);
-        
-        // Check if all modules are completed -> course completion
-        const allModulesCompleted = checkAllModulesCompleted();
-        if (allModulesCompleted && completeCourse) {
-          await completeCourse(courseId || 'unknown');
+        if (courseError) {
+          setError(courseError.message);
+        } else if (courseData) {
+          setCourse(courseData);
+        } else {
+          setError('Course not found');
         }
+      } catch (err) {
+        setError('Failed to fetch course');
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
+    };
+
+    fetchCourse();
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!user || !courseId) return;
+
+    const fetchProgress = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('course_progress')
+          .select('*')
+          .eq('course_id', courseId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching course progress:', error);
+        } else {
+          setProgress(data || null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch course progress:', err);
+      }
+    };
+
+    fetchProgress();
+  }, [user, courseId]);
+
+  const markLessonComplete = async (lessonId: string) => {
+    if (!user || !courseId) return;
+
+    try {
+      const currentCompletedLessons = progress?.completed_lessons || [];
+      if (currentCompletedLessons.includes(lessonId)) return;
+
+      const updatedLessons = [...currentCompletedLessons, lessonId];
+
+      const { data, error } = await supabase
+        .from('course_progress')
+        .upsert(
+          {
+            course_id: courseId,
+            user_id: user.id,
+            completed_lessons: updatedLessons,
+          },
+          { onConflict: ['course_id', 'user_id'] }
+        )
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating course progress:', error);
+      } else {
+        setProgress(data);
+      }
+    } catch (err) {
+      console.error('Failed to update course progress:', err);
     }
   };
 
-  // Check for completions when video has been completed
-  if (videoCompleted) {
-    checkCourseCompletion();
-  }
+  const isLessonCompleted = (lessonId: string): boolean => {
+    return progress?.completed_lessons?.includes(lessonId) || false;
+  };
 
   return {
-    courseData,
-    activeTab,
-    setActiveTab,
-    activeVideoId,
-    activeLesson,
-    videoUrl,
-    videoTitle,
-    progressPercentage,
-    userProgress,
-    handleLessonClick,
-    handleVideoProgress,
-    handleVideoEnded,
-    hasCourseCompletionBadge,
-    videoCompleted
+    course,
+    loading,
+    error,
+    progress,
+    markLessonComplete,
+    isLessonCompleted,
   };
-}
+};

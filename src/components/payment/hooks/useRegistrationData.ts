@@ -1,6 +1,5 @@
-
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/auth';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/auth/AuthContext';
 import { RegistrationData } from '@/types/payment';
 
 export const useRegistrationData = () => {
@@ -41,7 +40,7 @@ export const useRegistrationData = () => {
     }
   };
 
-  const updateRegistrationData = (newData: Partial<RegistrationData>) => {
+  const updateRegistrationData = useCallback((newData: Partial<RegistrationData>) => {
     if (!registrationData && !contextRegistrationData) return;
     
     const updatedData = {
@@ -51,7 +50,7 @@ export const useRegistrationData = () => {
     
     setRegistrationData(updatedData as RegistrationData);
     updateContextRegistrationData(updatedData);
-  };
+  }, [registrationData, contextRegistrationData, updateContextRegistrationData]);
 
   const clearRegistrationData = () => {
     clearContextRegistrationData();
